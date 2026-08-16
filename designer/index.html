@@ -4,7 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="可離線使用的 Kubernetes 架構圖設計器">
+  <meta name="theme-color" content="#326ce5">
+  <link rel="canonical" href="https://johnsonchang123.github.io/kube-manifest-pilot/designer/">
   <title>Kubernetes Architecture Designer｜KubeManifestPilot</title>
+  <script>
+    (() => {
+      const key = 'kube-manifest-pilot.theme';
+      const media = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : { matches: false };
+      let preference = null;
+      try {
+        const stored = window.localStorage.getItem(key);
+        if (stored === 'light' || stored === 'dark') preference = stored;
+      } catch (_) { /* Theme persistence is optional. */ }
+      document.documentElement.dataset.theme = preference || (media.matches ? 'dark' : 'light');
+      document.documentElement.dataset.themePreference = preference ? 'manual' : 'system';
+    })();
+  </script>
   <style>
     :root {
       color-scheme: light;
@@ -20,12 +35,30 @@
       --success: #16794c;
       --warning: #a45b00;
       --danger: #c33939;
+      --stage-bg: #f8fafc;
       --sidebar-left: 248px;
       --sidebar-right: 292px;
       --toolbar-height: 92px;
       --status-height: 28px;
       --radius: 8px;
       font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+    }
+
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --k8s: #78a6ff;
+      --k8s-dark: #9bbcff;
+      --ink: #edf4ff;
+      --muted: #b5c2d5;
+      --line: #35445b;
+      --line-strong: #4a5b73;
+      --surface: #111a2b;
+      --surface-2: #0b1220;
+      --surface-3: #1b2940;
+      --success: #70d9ad;
+      --warning: #f1c16f;
+      --danger: #ff929d;
+      --stage-bg: #0d1523;
     }
 
     * { box-sizing: border-box; }
@@ -39,10 +72,10 @@
     .hidden { display: none !important; }
     .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
-    .app { height: 100%; display: grid; grid-template-rows: var(--toolbar-height) minmax(0, 1fr) var(--status-height); }
+    .app { height: 100%; height: 100dvh; display: grid; grid-template-rows: var(--toolbar-height) minmax(0, 1fr) var(--status-height); }
     .topbar { background: var(--surface); border-bottom: 1px solid var(--line); z-index: 20; min-width: 0; }
     .identity-row, .tool-row { display: flex; align-items: center; min-width: 0; }
-    .identity-row { height: 48px; padding: 0 12px; border-bottom: 1px solid #edf1f6; gap: 10px; }
+    .identity-row { height: 48px; padding: 0 12px; border-bottom: 1px solid var(--line); gap: 10px; }
     .brand { display: flex; align-items: center; gap: 9px; min-width: 230px; font-weight: 720; letter-spacing: -.01em; }
     .brand-mark { width: 29px; height: 29px; display: grid; place-items: center; color: white; background: var(--k8s); border-radius: 7px; font-size: 17px; font-weight: 800; }
     .brand small { display: block; color: var(--muted); font-size: 10px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; }
@@ -81,6 +114,7 @@
     .sidebar.right { border-left: 1px solid var(--line); }
     .sidebar-header { min-height: 43px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
     .sidebar-header h2 { font-size: 12px; margin: 0; text-transform: uppercase; letter-spacing: .07em; }
+    .sidebar-header-actions { display: flex; align-items: center; gap: 7px; }
     .sidebar-body { flex: 1; min-height: 0; overflow: auto; }
     .sidebar-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 8px; }
     .sidebar-tabs button { border: 1px solid var(--line); background: var(--surface); border-radius: 5px; padding: 6px; font-size: 11px; font-weight: 650; }
@@ -98,7 +132,7 @@
     .palette-item span:last-child { overflow: hidden; text-overflow: ellipsis; line-height: 1.15; font-size: 10.5px; font-weight: 650; }
     .palette-empty { padding: 20px; text-align: center; color: var(--muted); }
 
-    .stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #f8fafc; }
+    .stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: var(--stage-bg); }
     #canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: default; }
     #canvas.pan-mode, #canvas.is-panning { cursor: grab; }
     #canvas.is-panning { cursor: grabbing; }
@@ -112,7 +146,8 @@
     .badge.env-dev { color: #275fae; border-color: #b7cef2; background: rgba(239,246,255,.96); font-weight: 720; }
     .stage-tools { position: absolute; left: 10px; bottom: 10px; display: flex; flex-direction: column; gap: 4px; }
     .stage-tools .btn { background: rgba(255,255,255,.96); width: 32px; height: 32px; padding: 0; }
-    .stage-panel-toggle { display: none; position: absolute; right: 10px; top: 10px; z-index: 4; background: rgba(255,255,255,.96); }
+    .stage-panel-toggles { display: none; position: absolute; right: 10px; top: 10px; z-index: 4; gap: 5px; }
+    .stage-panel-toggles .btn { min-width: 34px; background: rgba(255,255,255,.96); }
     .minimap-wrap { position: absolute; right: 10px; bottom: 10px; width: 188px; height: 116px; background: rgba(255,255,255,.96); border: 1px solid var(--line-strong); border-radius: 7px; overflow: hidden; }
     .minimap-title { position: absolute; left: 7px; top: 4px; z-index: 2; color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
     #minimap { width: 100%; height: 100%; cursor: pointer; }
@@ -139,26 +174,30 @@
     .status-links a { color: var(--muted); text-decoration: none; }
     .status-links a:hover, .status-links a:focus-visible { color: var(--k8s); text-decoration: underline; }
 
-    .modal-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(15,25,43,.34); display: grid; place-items: center; padding: 24px; }
-    .modal { width: min(760px, 96vw); max-height: min(760px, 92vh); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 20px 55px rgba(24,36,58,.2); display: flex; flex-direction: column; overflow: hidden; }
-    .modal.wide { width: min(980px, 96vw); }
+    .drawer-close { display: none; width: 32px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: var(--surface); font-size: 20px; line-height: 1; }
+    .drawer-backdrop { position: fixed; inset: var(--toolbar-height) 0 var(--status-height); z-index: 55; border: 0; background: rgba(4,10,20,.58); cursor: default; }
+
+    .modal-backdrop { position: fixed; inset: 0; z-index: 100; overflow: hidden; background: rgba(15,25,43,.5); display: grid; place-items: center; padding: clamp(8px, 3vw, 24px); }
+    .modal { width: min(760px, 100%); max-height: 100%; min-height: 0; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 20px 55px rgba(24,36,58,.2); display: flex; flex-direction: column; overflow: hidden; }
+    .modal.wide { width: min(980px, 100%); }
     .modal-head { min-height: 52px; padding: 11px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
+    .modal-head > div { min-width: 0; }
     .modal-head h2 { margin: 0; font-size: 15px; }
     .modal-head p { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
-    .modal-head .btn { margin-left: auto; }
-    .modal-body { overflow: auto; padding: 14px; }
+    .modal-head .btn { flex: none; margin-left: auto; }
+    .modal-body { min-height: 0; overflow: auto; padding: 14px; }
     .template-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
     .template-card { text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 12px; min-height: 92px; }
     .template-card:hover { border-color: #8fb1eb; background: #f7faff; }
     .template-card strong { display: block; margin-bottom: 5px; }
     .template-card span { color: var(--muted); font-size: 11px; line-height: 1.45; }
 
-    .tutorial-layout { display: grid; grid-template-columns: 218px minmax(0,1fr); min-height: 430px; }
+    .tutorial-layout { display: grid; grid-template-columns: 218px minmax(0,1fr); flex: 1; min-height: 0; overflow: hidden; }
     .tutorial-nav { border-right: 1px solid var(--line); padding: 10px; background: var(--surface-2); }
     .tutorial-nav button { width: 100%; text-align: left; border: 0; border-radius: 6px; background: transparent; padding: 8px 9px; margin-bottom: 3px; color: #4f5b6d; }
     .tutorial-nav button:hover { background: #eaf0f8; }
     .tutorial-nav button.active { color: var(--k8s); background: #e8f1ff; font-weight: 700; }
-    .tutorial-content { padding: 20px 22px 28px; overflow: auto; }
+    .tutorial-content { min-width: 0; min-height: 0; padding: 20px 22px 28px; overflow: auto; }
     .tutorial-content h3 { margin: 0 0 6px; font-size: 19px; }
     .tutorial-content .lead { margin: 0 0 14px; color: var(--muted); line-height: 1.6; }
     .tutorial-content ol, .tutorial-content ul { padding-left: 20px; line-height: 1.65; }
@@ -221,6 +260,64 @@
     .search-match .node-card { stroke: #e29a16; stroke-width: 2.3; }
     .group.search-match .group-shape { stroke: #e29a16; stroke-width: 2.3; }
 
+    /* Dark chrome stays independent from the document so exported SVG/PNG keeps its stable light palette. */
+    html[data-theme="dark"] .meta-input:hover,
+    html[data-theme="dark"] .meta-input:focus { background: var(--surface-3); }
+    html[data-theme="dark"] .env-select { border-color: #3c725b; color: #80ddb2; background: #15382d; }
+    html[data-theme="dark"] .env-select.env-dev { border-color: #43638f; color: #a8c7ff; background: #172d50; }
+    html[data-theme="dark"] .env-select.env-staging { border-color: #76582b; color: #f1c16f; background: #3d2c13; }
+    html[data-theme="dark"] .btn.active,
+    html[data-theme="dark"] .sidebar-tabs button.active { color: #a9c6ff; border-color: #5279b7; background: #1a3158; }
+    html[data-theme="dark"] .palette-section { border-top-color: var(--line); }
+    html[data-theme="dark"] .palette-section summary,
+    html[data-theme="dark"] .form-section,
+    html[data-theme="dark"] .field label { color: var(--muted); }
+    html[data-theme="dark"] .palette-item:hover,
+    html[data-theme="dark"] .template-card:hover { border-color: #638ac6; background: #14243d; }
+    html[data-theme="dark"] .stage-tools .btn,
+    html[data-theme="dark"] .stage-panel-toggles .btn,
+    html[data-theme="dark"] .badge,
+    html[data-theme="dark"] .minimap-wrap { color: var(--muted); background: rgba(17,26,43,.96); }
+    html[data-theme="dark"] .badge.env-production { color: #80ddb2; border-color: #3c725b; background: rgba(21,56,45,.96); }
+    html[data-theme="dark"] .badge.env-staging { color: #f1c16f; border-color: #76582b; background: rgba(61,44,19,.96); }
+    html[data-theme="dark"] .badge.env-dev { color: #a8c7ff; border-color: #43638f; background: rgba(23,45,80,.96); }
+    html[data-theme="dark"] .empty-icon { border-color: #607089; color: var(--muted); }
+    html[data-theme="dark"] .tutorial-nav button { color: var(--muted); }
+    html[data-theme="dark"] .tutorial-nav button:hover,
+    html[data-theme="dark"] .quick-item:hover,
+    html[data-theme="dark"] .quick-item.active { background: var(--surface-3); }
+    html[data-theme="dark"] .tutorial-nav button.active { color: #a9c6ff; background: #1a3158; }
+    html[data-theme="dark"] .notice { color: #c8d7ec; background: #172d50; }
+    html[data-theme="dark"] .notice.warning { color: #f2d49d; background: #3d2c13; }
+    html[data-theme="dark"] .modal { box-shadow: 0 20px 55px rgba(0,0,0,.5); }
+    html[data-theme="dark"] .quick-add,
+    html[data-theme="dark"] .context-menu { box-shadow: 0 12px 35px rgba(0,0,0,.48); }
+    html[data-theme="dark"] #minorGrid path { stroke: #243247; }
+    html[data-theme="dark"] #majorGrid > path { stroke: #35455d; }
+    html[data-theme="dark"] .edge-path { stroke: #9aabc2; }
+    html[data-theme="dark"] .edge-label-bg { fill: rgba(17,26,43,.96); stroke: #4a5b73; }
+    html[data-theme="dark"] .edge-label { fill: #d0daea; }
+    html[data-theme="dark"] .group-shape { fill: rgba(24,49,85,.66); stroke: #5279b7; }
+    html[data-theme="dark"] .group-header { fill: rgba(26,57,98,.96); }
+    html[data-theme="dark"] .group-title { fill: #c7d9fa; }
+    html[data-theme="dark"] .group-subtitle { fill: #9eb7dd; }
+    html[data-theme="dark"] .group.collapsed .group-shape { fill: rgba(24,49,85,.94); }
+    html[data-theme="dark"] .node-card { fill: #172235; stroke: #53647c; }
+    html[data-theme="dark"] .node:hover .node-card { stroke: #83a4d5; }
+    html[data-theme="dark"] .node-title { fill: #edf4ff; }
+    html[data-theme="dark"] .node-type { fill: #a8b7cb; }
+    html[data-theme="dark"] .node-subtitle { fill: #c3cede; }
+    html[data-theme="dark"] .node-detail { fill: #9cacc2; }
+    html[data-theme="dark"] .port,
+    html[data-theme="dark"] .resize-handle { fill: #111a2b; }
+    html[data-theme="dark"] #minimap > rect:first-child { fill: #0b1220; }
+
+    .workspace.left-collapsed { grid-template-columns: 0 minmax(0, 1fr) var(--sidebar-right); }
+    .workspace.right-collapsed { grid-template-columns: var(--sidebar-left) minmax(0, 1fr) 0; }
+    .workspace.left-collapsed.right-collapsed { grid-template-columns: 0 minmax(0, 1fr) 0; }
+    .workspace.left-collapsed .sidebar.left,
+    .workspace.right-collapsed .sidebar.right { overflow: hidden; border: 0; }
+
     @media (max-width: 1200px) {
       :root { --sidebar-left: 216px; --sidebar-right: 260px; }
       .brand { min-width: 205px; }
@@ -235,15 +332,75 @@
       #metaVersion { width: 55px; }
       #metaOwner { width: 100px; }
       .btn .label-optional { display: none; }
-      .stage-panel-toggle { display: inline-flex; }
+      .stage-panel-toggles { display: flex; }
+      .stage-left-toggle { display: none; }
       .field { grid-template-columns: 1fr; gap: 3px; }
-      .modal.wide { width: min(940px, calc(100vw - 48px)); }
       .tutorial-layout { grid-template-columns: 180px minmax(0,1fr); }
     }
-    .workspace.left-collapsed { grid-template-columns: 0 minmax(0, 1fr) var(--sidebar-right); }
-    .workspace.right-collapsed { grid-template-columns: var(--sidebar-left) minmax(0, 1fr) 0; }
-    .workspace.left-collapsed.right-collapsed { grid-template-columns: 0 minmax(0, 1fr) 0; }
-    .workspace.left-collapsed .sidebar.left, .workspace.right-collapsed .sidebar.right { overflow: hidden; border: 0; }
+
+    @media (max-width: 700px) {
+      :root { --toolbar-height: 96px; --status-height: 34px; --sidebar-left: min(88vw, 320px); --sidebar-right: min(88vw, 320px); }
+      .identity-row { height: 48px; padding: 0 8px; gap: 6px; }
+      .brand { min-width: 0; flex: 1; gap: 7px; font-size: 0; }
+      .brand-mark { width: 30px; height: 30px; }
+      .brand > div:last-child::before { content: "Designer"; font-size: 12px; }
+      .brand small, .meta-fields, .header-secondary, .theme-label, .header-label { display: none; }
+      .header-actions { gap: 4px; }
+      .header-actions .btn { min-width: 36px; min-height: 36px; padding: 5px 8px; }
+      #tutorialBtn .header-icon { font-size: 16px; line-height: 1; }
+      .tool-row { height: 48px; padding: 6px 8px; gap: 4px; overscroll-behavior-x: contain; }
+      .tool-row .btn { min-height: 36px; }
+      .search-box { width: min(190px, 64vw); }
+
+      .workspace,
+      .workspace.left-collapsed,
+      .workspace.right-collapsed,
+      .workspace.left-collapsed.right-collapsed { position: relative; grid-template-columns: minmax(0, 1fr); }
+      .stage { grid-column: 1; }
+      .sidebar { position: fixed; top: var(--toolbar-height); bottom: var(--status-height); z-index: 60; width: min(88vw, 320px); max-width: calc(100vw - 32px); box-shadow: 0 16px 38px rgba(12,22,38,.28); transition: transform .18s ease; }
+      .sidebar.left { left: 0; transform: translateX(0); border-right: 1px solid var(--line); }
+      .sidebar.right { right: 0; transform: translateX(0); border-left: 1px solid var(--line); }
+      html:not([data-panels-ready]) .sidebar.left,
+      .workspace.left-collapsed .sidebar.left { visibility: hidden; transform: translateX(-105%); pointer-events: none; }
+      html:not([data-panels-ready]) .sidebar.right,
+      .workspace.right-collapsed .sidebar.right { visibility: hidden; transform: translateX(105%); pointer-events: none; }
+      .drawer-close { display: inline-grid; place-items: center; }
+      .stage-panel-toggles { display: flex; }
+      .stage-left-toggle { display: inline-flex; }
+      .canvas-badge { top: 8px; left: 8px; }
+      #canvasStats, .minimap-wrap { display: none; }
+      .stage-tools { left: 8px; bottom: 8px; flex-direction: row; }
+      .stage-tools .btn { width: 38px; height: 38px; }
+
+      .statusbar { gap: 8px; padding: 0 7px; font-size: 10px; }
+      .status-secondary { display: none; }
+      #statusMessage { flex: 1; }
+      .status-links { gap: 7px; }
+      .status-links .cookie-link { display: none; }
+      .toast-region { top: calc(var(--toolbar-height) + 8px); right: 8px; }
+      .quick-add { width: min(270px, calc(100vw - 16px)); }
+      .context-menu { max-width: calc(100vw - 10px); }
+    }
+
+    @media (max-width: 600px) {
+      .template-grid { grid-template-columns: 1fr; }
+      .tutorial-layout { grid-template-columns: minmax(0,1fr); grid-template-rows: auto minmax(0,1fr); }
+      .tutorial-nav { display: flex; gap: 5px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 7px; overscroll-behavior-x: contain; }
+      .tutorial-nav button { width: auto; flex: 0 0 min(220px, 74vw); margin: 0; padding: 8px; }
+      .tutorial-content { padding: 14px 13px 20px; }
+      .tutorial-content h3 { font-size: 17px; }
+      .modal-head { padding: 9px 10px; }
+      .modal-head h2 { overflow-wrap: anywhere; }
+    }
+
+    @media (max-height: 520px) {
+      .modal-head { min-height: 44px; padding-block: 7px; }
+      .modal-head p { display: none; }
+      .modal-body { padding: 10px; }
+      .tutorial-nav { padding-block: 5px; }
+      .tutorial-nav button { padding-block: 6px; }
+      .tutorial-content { padding-block: 10px 14px; }
+    }
   </style>
 </head>
 <body>
@@ -263,9 +420,10 @@
           <input id="metaOwner" class="meta-input" aria-label="Owner" value="AI Platform Team">
         </div>
         <div class="header-actions">
-          <a class="btn ghost" href="../generator/" title="回到 Manifest 問卷產生器" style="text-decoration:none">問卷產生器</a>
-          <button class="btn ghost" id="tutorialBtn" title="開啟部署教學">部署教學</button>
-          <button class="btn primary" id="saveBtn" title="儲存至此瀏覽器">儲存</button>
+          <button class="btn ghost" type="button" data-theme-toggle aria-label="切換亮色或暗色模式" title="切換亮色或暗色模式"><span data-theme-icon aria-hidden="true">◐</span><span class="theme-label" data-theme-label>主題</span></button>
+          <a class="btn ghost header-secondary" href="../generator/" title="回到 Manifest 問卷產生器" style="text-decoration:none">問卷產生器</a>
+          <button class="btn ghost" type="button" id="tutorialBtn" title="開啟部署教學"><span class="header-icon" aria-hidden="true">▤</span><span class="header-label">部署教學</span></button>
+          <button class="btn primary" type="button" id="saveBtn" title="儲存至此瀏覽器">儲存</button>
         </div>
       </div>
       <nav class="tool-row" aria-label="Architecture tools">
@@ -312,8 +470,8 @@
     </header>
 
     <main class="workspace" id="workspace">
-      <aside class="sidebar left" aria-label="元件庫">
-        <div class="sidebar-header"><h2>Component Palette</h2><span id="paletteCount"></span></div>
+      <aside class="sidebar left" id="leftSidebar" aria-label="元件庫">
+        <div class="sidebar-header"><h2>Component Palette</h2><div class="sidebar-header-actions"><span id="paletteCount"></span><button class="drawer-close" type="button" data-drawer-close="left" aria-label="關閉元件庫">×</button></div></div>
         <div class="sidebar-tabs" role="tablist">
           <button class="active" data-palette-tab="kubernetes" role="tab">Kubernetes</button>
           <button data-palette-tab="application" role="tab">Application</button>
@@ -350,7 +508,10 @@
         </svg>
         <div class="canvas-drop-hint">放開以新增元件</div>
         <div class="canvas-badge"><span class="badge env-production" id="canvasEnv">PRODUCTION</span><span class="badge" id="canvasStats">0 nodes · 0 connections</span></div>
-        <button class="btn icon stage-panel-toggle" id="stageRightToggle" title="開啟／收合屬性面板" aria-label="開啟或收合屬性面板">⚙</button>
+        <div class="stage-panel-toggles" aria-label="側邊面板">
+          <button class="btn icon stage-left-toggle" type="button" id="stageLeftToggle" title="開啟／收合元件庫" aria-label="開啟或收合元件庫" aria-controls="leftSidebar">☰</button>
+          <button class="btn icon" type="button" id="stageRightToggle" title="開啟／收合屬性面板" aria-label="開啟或收合屬性面板" aria-controls="rightSidebar">⚙</button>
+        </div>
         <div class="stage-tools" aria-label="Canvas quick tools">
           <button class="btn" id="stageZoomIn" aria-label="放大">＋</button>
           <button class="btn" id="stageZoomOut" aria-label="縮小">−</button>
@@ -359,16 +520,18 @@
         <div class="minimap-wrap"><span class="minimap-title">Mini map</span><svg id="minimap" aria-label="架構縮圖"></svg></div>
       </section>
 
-      <aside class="sidebar right" aria-label="屬性面板">
-        <div class="sidebar-header"><h2>Properties</h2><span id="selectionCount"></span></div>
+      <aside class="sidebar right" id="rightSidebar" aria-label="屬性面板">
+        <div class="sidebar-header"><h2>Properties</h2><div class="sidebar-header-actions"><span id="selectionCount"></span><button class="drawer-close" type="button" data-drawer-close="right" aria-label="關閉屬性面板">×</button></div></div>
         <div class="sidebar-body" id="inspector"></div>
       </aside>
     </main>
 
     <footer class="statusbar">
-      <span id="statusMode">選取模式</span><span id="statusPosition">X 0 · Y 0</span><span id="statusSnap">Snap 20px</span><span id="statusMessage">已載入 Production Kubernetes Application</span><span>離線單檔 · Vanilla JavaScript · SVG</span><nav class="status-links" aria-label="網站政策"><a href="../privacy/">隱私權</a><a href="../privacy/#cookies">Cookie</a><a href="../licenses/">第三方授權</a></nav>
+      <span class="status-secondary" id="statusMode">選取模式</span><span class="status-secondary" id="statusPosition">X 0 · Y 0</span><span class="status-secondary" id="statusSnap">Snap 20px</span><span id="statusMessage">已載入 Production Kubernetes Application</span><span class="status-secondary">離線單檔 · Vanilla JavaScript · SVG</span><nav class="status-links" aria-label="網站政策"><a href="../privacy/">隱私權</a><a class="cookie-link" href="../privacy/#cookies">Cookie</a><a href="../licenses/">第三方授權</a></nav>
     </footer>
   </div>
+
+  <button class="drawer-backdrop hidden" type="button" id="drawerBackdrop" aria-label="關閉側邊面板"></button>
 
   <div class="modal-backdrop hidden" id="templateModal" role="dialog" aria-modal="true" aria-labelledby="templateTitle">
     <div class="modal">
@@ -402,6 +565,8 @@
   // this deliverable must remain a single, offline HTML file.
   const NS = 'http://www.w3.org/2000/svg';
   const STORAGE_KEY = 'k8s-architecture-designer.document.v1';
+  const THEME_STORAGE_KEY = 'kube-manifest-pilot.theme';
+  const THEME_MEDIA = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : { matches: false };
   const SCHEMA = 'k8s-architecture-designer';
   const DOC_VERSION = 1;
   const deepClone = value => JSON.parse(JSON.stringify(value));
@@ -422,6 +587,44 @@
   const debounce = (fn, delay = 250) => {
     let timer;
     return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); };
+  };
+
+  const systemTheme = () => THEME_MEDIA.matches ? 'dark' : 'light';
+  const updateThemeControls = () => {
+    const dark = document.documentElement.dataset.theme === 'dark';
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0b1220' : '#326ce5');
+    document.querySelectorAll('[data-theme-toggle]').forEach(button => {
+      button.setAttribute('aria-pressed', String(dark));
+      button.setAttribute('aria-label', dark ? '切換為亮色模式' : '切換為暗色模式');
+      button.title = dark ? '切換為亮色模式' : '切換為暗色模式';
+      const icon = button.querySelector('[data-theme-icon]');
+      const label = button.querySelector('[data-theme-label]');
+      if (icon) icon.textContent = dark ? '☀' : '☾';
+      if (label) label.textContent = dark ? '亮色' : '暗色';
+    });
+  };
+  const applyTheme = (theme, preference = 'manual') => {
+    document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
+    document.documentElement.dataset.themePreference = preference;
+    updateThemeControls();
+  };
+  const initThemeControls = () => {
+    updateThemeControls();
+    document.querySelectorAll('[data-theme-toggle]').forEach(button => button.addEventListener('click', () => {
+      const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+      applyTheme(next, 'manual');
+      try { window.localStorage.setItem(THEME_STORAGE_KEY, next); } catch (_) { /* The in-memory theme still works. */ }
+    }));
+    const followSystem = event => {
+      if (document.documentElement.dataset.themePreference === 'system') applyTheme(event.matches ? 'dark' : 'light', 'system');
+    };
+    if (typeof THEME_MEDIA.addEventListener === 'function') THEME_MEDIA.addEventListener('change', followSystem);
+    else if (typeof THEME_MEDIA.addListener === 'function') THEME_MEDIA.addListener(followSystem);
+    window.addEventListener('storage', event => {
+      if (event.key !== THEME_STORAGE_KEY) return;
+      if (event.newValue === 'light' || event.newValue === 'dark') applyTheme(event.newValue, 'manual');
+      else applyTheme(systemTheme(), 'system');
+    });
   };
 
   const TYPE_COLORS = {
@@ -1238,7 +1441,7 @@
       if(!items.length){const empty=document.createElement('div');empty.className='palette-empty';empty.textContent='找不到符合的元件';this.palette.append(empty);}else sections.forEach((sectionItems,name)=>{const details=document.createElement('details');details.className='palette-section';details.open=true;const summary=document.createElement('summary');summary.textContent=name;const list=document.createElement('div');list.className='palette-list';sectionItems.forEach(item=>list.append(this.paletteItem(item)));details.append(summary,list);this.palette.append(details);});
       document.getElementById('paletteCount').textContent=`${items.length}`;
     }
-    paletteItem(item){const el=document.createElement('div');el.className='palette-item';el.draggable=true;el.dataset.component=item.type;el.title=`拖曳或點擊新增 ${item.type}`;const icon=document.createElement('span');icon.className='palette-icon';icon.style.setProperty('--item-color',TYPE_COLORS[item.category]||'#326ce5');icon.textContent=iconGlyph(item.type);const label=document.createElement('span');label.textContent=item.type;el.append(icon,label);el.addEventListener('dragstart',event=>{event.dataTransfer.setData('application/x-k8s-component',item.type);event.dataTransfer.effectAllowed='copy';});el.addEventListener('click',()=>{const rect=this.app.renderer.svg.getBoundingClientRect(),point=this.app.canvas.screenToWorld(rect.left+rect.width/2,rect.top+rect.height/2);this.app.addComponent(item.type,point.x-90,point.y-45);});return el;}
+    paletteItem(item){const el=document.createElement('div');el.className='palette-item';el.draggable=true;el.dataset.component=item.type;el.title=`拖曳或點擊新增 ${item.type}`;const icon=document.createElement('span');icon.className='palette-icon';icon.style.setProperty('--item-color',TYPE_COLORS[item.category]||'#326ce5');icon.textContent=iconGlyph(item.type);const label=document.createElement('span');label.textContent=item.type;el.append(icon,label);el.addEventListener('dragstart',event=>{event.dataTransfer.setData('application/x-k8s-component',item.type);event.dataTransfer.effectAllowed='copy';});el.addEventListener('click',()=>{const rect=this.app.renderer.svg.getBoundingClientRect(),point=this.app.canvas.screenToWorld(rect.left+rect.width/2,rect.top+rect.height/2);this.app.addComponent(item.type,point.x-90,point.y-45);this.app.panels?.closeMobile();});return el;}
     syncMeta(){const m=this.app.state.state.meta,environment=document.getElementById('metaEnvironment');document.getElementById('metaName').value=m.name;environment.value=m.environment;environment.className=`env-select env-${m.environment.toLowerCase()}`;document.getElementById('metaVersion').value=m.architectureVersion;document.getElementById('metaOwner').value=m.owner;}
     commitMeta(){const values={name:document.getElementById('metaName').value.trim()||'Untitled Architecture',environment:document.getElementById('metaEnvironment').value,architectureVersion:document.getElementById('metaVersion').value.trim(),owner:document.getElementById('metaOwner').value.trim()},current=this.app.state.state.meta;if(values.name===current.name&&values.environment===current.environment&&values.architectureVersion===current.architectureVersion&&values.owner===current.owner)return;this.app.state.commit('Update Architecture Information',doc=>Object.assign(doc.meta,values));}
     renderTemplates(){const grid=document.getElementById('templateGrid');grid.replaceChildren();this.templates.templates.forEach(template=>{const btn=document.createElement('button');btn.className='template-card';const strong=document.createElement('strong');strong.textContent=template.name;const span=document.createElement('span');span.textContent=template.description;btn.append(strong,span);btn.addEventListener('click',()=>{this.app.loadTemplate(template);this.closeModal('templateModal');});grid.append(btn);});}
@@ -1372,11 +1575,131 @@
     }
   }
 
+  class ResponsivePanelController {
+    constructor(app) {
+      this.app = app;
+      this.workspace = document.getElementById('workspace');
+      this.backdrop = document.getElementById('drawerBackdrop');
+      this.sidebars = {
+        left: document.getElementById('leftSidebar'),
+        right: document.getElementById('rightSidebar')
+      };
+      this.buttons = {
+        left: [document.getElementById('leftToggle'), document.getElementById('stageLeftToggle')],
+        right: [document.getElementById('rightToggle'), document.getElementById('stageRightToggle')]
+      };
+      this.media = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 700px)') : { matches: window.innerWidth <= 700 };
+      this.mobile = null;
+      this.hasDesktopState = false;
+      this.desktopState = { left: false, right: false };
+      this.bind();
+      this.sync(true);
+    }
+
+    bind() {
+      this.buttons.left.forEach(button => { if (button) button.addEventListener('click', () => this.toggle('left')); });
+      this.buttons.right.forEach(button => { if (button) button.addEventListener('click', () => this.toggle('right')); });
+      document.querySelectorAll('[data-drawer-close]').forEach(button => button.addEventListener('click', () => this.closeMobile()));
+      this.backdrop.addEventListener('click', () => this.closeMobile());
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && this.mobile && this.hasOpenDrawer()) this.closeMobile();
+      });
+      const mediaChanged = () => this.sync(false);
+      if (typeof this.media.addEventListener === 'function') this.media.addEventListener('change', mediaChanged);
+      else if (typeof this.media.addListener === 'function') this.media.addListener(mediaChanged);
+      window.addEventListener('resize', debounce(() => this.sync(false), 100));
+    }
+
+    collapsed(side) {
+      return this.workspace.classList.contains(`${side}-collapsed`);
+    }
+
+    setCollapsed(side, collapsed) {
+      this.workspace.classList.toggle(`${side}-collapsed`, Boolean(collapsed));
+    }
+
+    sync(initial = false) {
+      const nextMobile = Boolean(this.media.matches);
+      if (nextMobile !== this.mobile) {
+        if (nextMobile) {
+          if (this.mobile === false) {
+            this.desktopState = { left: this.collapsed('left'), right: this.collapsed('right') };
+            this.hasDesktopState = true;
+          }
+          this.mobile = true;
+          this.setCollapsed('left', true);
+          this.setCollapsed('right', true);
+        } else {
+          this.mobile = false;
+          if (this.hasDesktopState) {
+            this.setCollapsed('left', this.desktopState.left);
+            this.setCollapsed('right', this.desktopState.right);
+          } else {
+            this.setCollapsed('left', false);
+            this.setCollapsed('right', window.innerWidth <= 1040);
+            this.desktopState = { left: false, right: window.innerWidth <= 1040 };
+            this.hasDesktopState = true;
+          }
+        }
+      } else if (initial && !nextMobile) {
+        this.setCollapsed('left', false);
+        this.setCollapsed('right', window.innerWidth <= 1040);
+      }
+      this.updateChrome();
+      document.documentElement.dataset.panelsReady = 'true';
+      window.requestAnimationFrame(() => this.app.renderer.render());
+    }
+
+    toggle(side) {
+      if (this.mobile) {
+        const shouldOpen = this.collapsed(side);
+        this.setCollapsed('left', true);
+        this.setCollapsed('right', true);
+        if (shouldOpen) this.setCollapsed(side, false);
+      } else {
+        this.setCollapsed(side, !this.collapsed(side));
+        this.desktopState = { left: this.collapsed('left'), right: this.collapsed('right') };
+        this.hasDesktopState = true;
+      }
+      this.updateChrome();
+      window.requestAnimationFrame(() => this.app.renderer.render());
+    }
+
+    hasOpenDrawer() {
+      return this.mobile && (!this.collapsed('left') || !this.collapsed('right'));
+    }
+
+    closeMobile() {
+      if (!this.mobile) return;
+      this.setCollapsed('left', true);
+      this.setCollapsed('right', true);
+      this.updateChrome();
+      window.requestAnimationFrame(() => this.app.renderer.render());
+    }
+
+    updateChrome() {
+      ['left', 'right'].forEach(side => {
+        const collapsed = this.collapsed(side);
+        const label = side === 'left' ? '元件庫' : '屬性面板';
+        this.sidebars[side].inert = collapsed;
+        this.sidebars[side].setAttribute('aria-hidden', String(collapsed));
+        this.buttons[side].forEach(button => {
+          if (!button) return;
+          button.setAttribute('aria-expanded', String(!collapsed));
+          button.setAttribute('aria-controls', side === 'left' ? 'leftSidebar' : 'rightSidebar');
+          button.setAttribute('aria-label', `${collapsed ? '開啟' : '收合'}${label}`);
+          button.title = `${collapsed ? '開啟' : '收合'}${label}`;
+        });
+      });
+      this.backdrop.classList.toggle('hidden', !this.hasOpenDrawer());
+    }
+  }
+
   class DiagramApp {
     constructor(){
       this.bus=new EventBus();this.templates=new TemplateManager();this.history=new HistoryManager(this.bus);this.ui=new UIManager(this.bus,this.templates);
       let initial=this.templates.production(),restored=false;try{const raw=localStorage.getItem(STORAGE_KEY);if(raw){initial=DocumentCodec.normalize(JSON.parse(raw));restored=true;}}catch(error){setTimeout(()=>this.ui.toast('本機存檔無法讀取，已載入完整範例。','error'),200);}
-      this.state=new StateManager(this.bus,this.history,initial);this.selection=new SelectionManager(this.bus,this.state);this.nodeManager=new NodeManager(this.state,this.selection);this.groupManager=new GroupManager(this.state,this.selection);this.edgeManager=new EdgeManager(this.state,this.selection);this.router=new OrthogonalRouter(this.state);this.renderer=new SVGRenderer(this.state,this.selection,this.router,this.bus);this.canvas=new CanvasManager(this.state,this.renderer,this.bus);this.autoLayout=new AutoLayoutManager(this.state);this.exporter=new ExportManager(this.state,this.renderer,this.ui);this.persistence=new PersistenceManager(this.state,this.ui);this.ui.attach(this);this.interactions=new InteractionController(this);this.autosave=debounce(()=>this.persistence.save(true),500);this.bindControls();if(window.innerWidth<=1040)document.getElementById('workspace').classList.add('right-collapsed');this.renderer.render();if(!restored&&window.innerWidth>=1600)requestAnimationFrame(()=>this.canvas.fit());document.getElementById('statusMessage').textContent=restored?'已恢復瀏覽器中的架構存檔':'已載入 Production Kubernetes Application';
+      this.state=new StateManager(this.bus,this.history,initial);this.selection=new SelectionManager(this.bus,this.state);this.nodeManager=new NodeManager(this.state,this.selection);this.groupManager=new GroupManager(this.state,this.selection);this.edgeManager=new EdgeManager(this.state,this.selection);this.router=new OrthogonalRouter(this.state);this.renderer=new SVGRenderer(this.state,this.selection,this.router,this.bus);this.canvas=new CanvasManager(this.state,this.renderer,this.bus);this.autoLayout=new AutoLayoutManager(this.state);this.exporter=new ExportManager(this.state,this.renderer,this.ui);this.persistence=new PersistenceManager(this.state,this.ui);this.ui.attach(this);this.interactions=new InteractionController(this);this.panels=new ResponsivePanelController(this);this.autosave=debounce(()=>this.persistence.save(true),500);this.bindControls();this.renderer.render();if(!restored&&window.innerWidth>=1600)requestAnimationFrame(()=>this.canvas.fit());document.getElementById('statusMessage').textContent=restored?'已恢復瀏覽器中的架構存檔':'已載入 Production Kubernetes Application';
     }
     bindControls(){
       document.getElementById('selectModeBtn').onclick=()=>this.interactions.setMode('select');document.getElementById('panModeBtn').onclick=()=>this.interactions.setMode('pan');document.getElementById('connectModeBtn').onclick=()=>this.interactions.setMode('connect');
@@ -1388,7 +1711,6 @@
       const search=document.getElementById('architectureSearch');search.oninput=()=>{this.renderer.searchTerm=search.value.trim();document.getElementById('searchClear').classList.toggle('hidden',!this.renderer.searchTerm);this.renderer.render();};document.getElementById('searchClear').onclick=()=>{search.value='';search.dispatchEvent(new Event('input'));search.focus();};
       document.getElementById('saveBtn').onclick=()=>this.persistence.save();document.getElementById('importBtn').onclick=()=>document.getElementById('importFile').click();document.getElementById('importFile').onchange=event=>this.importFile(event.target.files[0]);
       document.getElementById('exportBtn').onclick=event=>this.ui.showMenu(event.clientX,event.clientY,[{label:'匯出 PNG',action:()=>this.exporter.exportPNG()},{label:'匯出 SVG',action:()=>this.exporter.exportSVG()},{label:'匯出 JSON',action:()=>this.exporter.exportJSON()},{label:'複製 JSON',action:()=>this.exporter.copyJSON().catch(()=>this.ui.toast('複製失敗，請使用匯出 JSON。','error'))},'separator',{label:'操作說明',action:()=>this.ui.openModal('helpModal')}]);
-      document.getElementById('leftToggle').onclick=()=>{document.getElementById('workspace').classList.toggle('left-collapsed');setTimeout(()=>this.renderer.render(),180);};const toggleRight=()=>{document.getElementById('workspace').classList.toggle('right-collapsed');setTimeout(()=>this.renderer.render(),180);};document.getElementById('rightToggle').onclick=toggleRight;document.getElementById('stageRightToggle').onclick=toggleRight;
       this.historyBus();this.bus.on('document:committed',()=>this.autosave());this.bus.on('document:loaded',()=>this.autosave());this.bus.on('view:changed',()=>this.autosave());window.addEventListener('resize',debounce(()=>this.renderer.render(),100));
     }
     historyBus(){this.bus.on('history:changed',state=>{document.getElementById('undoBtn').disabled=!state.canUndo;document.getElementById('redoBtn').disabled=!state.canRedo;});this.history.emit();}
@@ -1401,6 +1723,7 @@
     async importFile(file){if(!file)return;try{if(file.size>5*1024*1024)throw new Error('檔案超過 5 MB 安全上限。');const raw=await file.text(),candidate=DocumentCodec.normalize(JSON.parse(raw));this.state.replace(candidate,'Import JSON',true);this.selection.clear();this.ui.toast('JSON 已完整匯入，包含原本的縮放與視窗位置。');}catch(error){this.ui.toast(`匯入失敗：${error.message}`,'error');}finally{document.getElementById('importFile').value='';}}
   }
 
+  initThemeControls();
   const app = new DiagramApp();
   </script>
 </body>

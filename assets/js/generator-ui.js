@@ -14,6 +14,7 @@
   const generateButton = document.querySelector('[data-action="generate"]');
   const saveButton = document.querySelector('[data-action="save-draft"]');
   const dirtyFields = new Set();
+  const completedSteps = new Set();
   let currentStep = 0;
   let activeOutput = 'yaml';
   let generated = { yaml: '', tutorial: '', json: '' };
@@ -102,6 +103,7 @@
         type: value(`${prefix}StartupType`) || 'tcp',
         path: value(`${prefix}StartupPath`)
       },
+      nodeSelector: configMap(value(`${prefix}NodeSelector`)),
       configValues: configMap(value(`${prefix}Config`)),
       imagePullSecret: value(`${prefix}PullSecret`),
       command: lineList(value(`${prefix}Command`)),
@@ -113,9 +115,10 @@
   function buildSpec() {
     const mode = value('databaseMode');
     const internal = mode === 'internal';
+    const exposureMode = value('exposureMode');
     return {
       schemaVersion: '1.0',
-      generatorVersion: '1.0.0',
+      generatorVersion: '1.1.0',
       template: selectedTemplate(),
       project: {
         name: value('projectName'),
@@ -139,14 +142,20 @@
         host: internal ? '' : value('externalHost'),
         hostKey: internal ? '' : value('externalHostKey'),
         userKey: internal ? value('databaseUserKey') : value('externalUserKey'),
-        databaseKey: internal ? value('databaseNameKey') : value('externalDatabaseKey')
+        databaseKey: internal ? value('databaseNameKey') : value('externalDatabaseKey'),
+        nodeSelector: internal ? configMap(value('databaseNodeSelector')) : {}
       },
       exposure: {
-        mode: value('exposureMode'),
-        ingressClassName: value('ingressClassName'),
-        hostname: value('hostname'),
-        tls: checked('tlsEnabled'),
-        tlsSecretName: value('tlsSecretName')
+        mode: exposureMode,
+        nodePorts: {
+          frontend: numberValue('frontendNodePort', 0),
+          backend: numberValue('backendNodePort', 0),
+          database: numberValue('databaseNodePort', 0)
+        },
+        ingressClassName: exposureMode === 'ingress' ? value('ingressClassName') : '',
+        hostname: exposureMode === 'ingress' ? value('hostname') : '',
+        tls: exposureMode === 'ingress' && checked('tlsEnabled'),
+        tlsSecretName: exposureMode === 'ingress' && checked('tlsEnabled') ? value('tlsSecretName') : ''
       },
       options: {
         createPdb: checked('createPdb'),
@@ -210,8 +219,34 @@
       if (spec.project.environment === 'PRODUCTION' && !spec.exposure.tls) addError('tlsEnabled', 'Production 對外 Ingress 必須啟用 TLS。');
       if (spec.exposure.tls && !spec.exposure.tlsSecretName) addError('tlsSecretName', '啟用 TLS 後必須引用既有 TLS Secret。');
     }
+    if (spec.exposure.mode === 'nodeport') {
+      const targets = [];
+      if (spec.frontend.enabled) targets.push(['frontend', 'frontendNodePort']);
+      if (spec.backend.enabled) targets.push(['backend', 'backendNodePort']);
+      if (!spec.frontend.enabled && !spec.backend.enabled && spec.database.mode === 'internal') targets.push(['database', 'databaseNodePort']);
+      const usedPorts = new Map();
+      targets.forEach(([target, fieldName]) => {
+        const port = spec.exposure.nodePorts[target];
+        if (port !== 0 && (!Number.isInteger(port) || port < 30000 || port > 32767)) {
+          addError(fieldName, '固定 NodePort 必須介於 Kubernetes 預設範圍 30000–32767；留空可由叢集自動分配。');
+        }
+        if (port !== 0 && usedPorts.has(port)) {
+          addError(fieldName, `NodePort ${port} 已同時指定給 ${usedPorts.get(port)}，每個 Service 必須使用不同 Port。`);
+        } else if (port !== 0) usedPorts.set(port, target);
+      });
+      warnings.push({ field: targets[0]?.[1] || 'exposureMode', message: 'NodePort 會透過節點網路對外提供服務；請另外限制防火牆、安全群組與來源網段。' });
+    }
+    const activeNodeSelectorFields = [];
+    if (spec.frontend.enabled) activeNodeSelectorFields.push('frontendNodeSelector');
+    if (spec.backend.enabled) activeNodeSelectorFields.push('backendNodeSelector');
+    if (spec.database.mode === 'internal') activeNodeSelectorFields.push('databaseNodeSelector');
+    activeNodeSelectorFields.forEach(name => {
+      lineList(value(name)).forEach(line => {
+        if (line.indexOf('=') <= 0) addError(name, `Node Selector 行格式錯誤：${line}；請使用 label-key=value。`);
+      });
+    });
     if (spec.options.hpa.enabled && spec.options.hpa.minReplicas > spec.options.hpa.maxReplicas) addError('hpaMax', 'HPA Max Replicas 不可小於 Min Replicas。');
-    ['frontendConfig', 'backendConfig'].forEach(name => {
+    ['frontend', 'backend'].filter(kind => spec[kind].enabled).map(kind => `${kind}Config`).forEach(name => {
       lineList(value(name)).forEach(line => {
         const key = line.split('=')[0].trim();
         if (/(password|passwd|token|secret|private.?key|api.?key)/i.test(key)) addError(name, `${key} 看起來是敏感資料，請改用既有 Secret reference。`);
@@ -252,6 +287,9 @@
     'exposure.ingressClassName': 'ingressClassName',
     'exposure.hostname': 'hostname',
     'exposure.tlsSecretName': 'tlsSecretName',
+    'exposure.nodePorts.frontend': 'frontendNodePort',
+    'exposure.nodePorts.backend': 'backendNodePort',
+    'exposure.nodePorts.database': 'databaseNodePort',
     'options.hpa.minReplicas': 'hpaMin',
     'options.hpa.maxReplicas': 'hpaMax',
     'options.hpa.cpuTarget': 'hpaCpu'
@@ -265,10 +303,12 @@
       const mode = value('databaseMode');
       const internal = mode === 'internal';
       const suffix = path.slice('database.'.length);
+      if (suffix === 'nodeSelector' || suffix.startsWith('nodeSelector.')) return 'databaseNodeSelector';
       const internalMap = {
         name: 'databaseName', image: 'databaseImage', port: 'databasePort', pvcSize: 'pvcSize',
         storageClassName: 'storageClassName', secretName: 'databaseSecretName',
-        passwordKey: 'databasePasswordKey', userKey: 'databaseUserKey', databaseKey: 'databaseNameKey'
+        passwordKey: 'databasePasswordKey', userKey: 'databaseUserKey', databaseKey: 'databaseNameKey',
+        nodeSelector: 'databaseNodeSelector'
       };
       const externalMap = {
         host: 'externalHost', port: 'externalPort', databaseName: 'externalDatabase', user: 'externalUser',
@@ -289,6 +329,12 @@
       return `${probeMatch[1]}${probe}${suffix}`;
     }
     if (/^(frontend|backend)\.env\[/.test(path)) return `${path.split('.')[0]}SecretEnv`;
+    if (/^(frontend|backend)\.nodeSelector(?:\.|$)/.test(path)) return `${path.split('.')[0]}NodeSelector`;
+    const textAreaMatch = path.match(/^(frontend|backend)\.(configValues|command|args)(?:\.|\[|$)/);
+    if (textAreaMatch) {
+      const suffix = { configValues: 'Config', command: 'Command', args: 'Args' }[textAreaMatch[2]];
+      return textAreaMatch[1] + suffix;
+    }
     return '';
   }
 
@@ -314,7 +360,7 @@
     }
   }
 
-  function applyTemplate() {
+  function applyTemplate(forceDatabaseDefault = false) {
     const rule = activeRule();
     document.querySelectorAll('[data-component]').forEach(section => {
       const visible = Boolean(rule[section.dataset.component]);
@@ -322,8 +368,12 @@
       section.querySelectorAll('input,select,textarea').forEach(control => control.disabled = !visible);
     });
     const databaseMode = field('databaseMode');
-    databaseMode.value = rule.database;
-    databaseMode.disabled = selectedTemplate() === 'postgresql';
+    const databaseModeLocked = selectedTemplate() === 'postgresql';
+    if (forceDatabaseDefault || databaseModeLocked || !dirtyFields.has('databaseMode')) {
+      databaseMode.value = rule.database;
+      dirtyFields.delete('databaseMode');
+    }
+    databaseMode.disabled = databaseModeLocked;
     updateDatabasePanels();
     updateSummary();
   }
@@ -339,10 +389,23 @@
 
   function updateConditionalFields() {
     const ingress = value('exposureMode') === 'ingress';
+    const nodeport = value('exposureMode') === 'nodeport';
     const ingressFields = document.querySelector('[data-ingress-fields]');
     ingressFields.hidden = !ingress;
     ingressFields.querySelectorAll('input,select').forEach(control => control.disabled = !ingress);
     field('tlsSecretName').closest('.field').hidden = !checked('tlsEnabled') || !ingress;
+    const nodeportFields = document.querySelector('[data-nodeport-fields]');
+    nodeportFields.hidden = !nodeport;
+    const rule = activeRule();
+    const hasApplication = Boolean(rule.frontend || rule.backend);
+    nodeportFields.querySelectorAll('[data-nodeport-target]').forEach(container => {
+      const target = container.dataset.nodeportTarget;
+      const relevant = target === 'frontend' ? Boolean(rule.frontend)
+        : target === 'backend' ? Boolean(rule.backend)
+          : !hasApplication && value('databaseMode') === 'internal';
+      container.hidden = !nodeport || !relevant;
+      container.querySelectorAll('input').forEach(control => control.disabled = !nodeport || !relevant);
+    });
     const hpa = checked('hpaEnabled');
     const hpaFields = document.querySelector('[data-hpa-fields]');
     hpaFields.hidden = !hpa;
@@ -371,32 +434,64 @@
     updateSummary();
   }
 
-  function showStep(index) {
+  function updateStepButtonStates() {
+    stepButtons.forEach((button, index) => {
+      button.classList.toggle('active', index === currentStep);
+      button.classList.toggle('complete', completedSteps.has(index));
+      button.setAttribute('aria-current', index === currentStep ? 'step' : 'false');
+    });
+  }
+
+  function invalidateCompletedFrom(index) {
+    completedSteps.forEach(completedIndex => {
+      if (completedIndex >= index) completedSteps.delete(completedIndex);
+    });
+    updateStepButtonStates();
+  }
+
+  function invalidateCompletedForControl(control) {
+    const ownerStep = control?.closest?.('.wizard-step');
+    if (!ownerStep) return;
+    const index = Number(ownerStep.dataset.step);
+    if (Number.isInteger(index)) invalidateCompletedFrom(index);
+  }
+
+  function showStep(index, scroll = true) {
     currentStep = Math.max(0, Math.min(steps.length - 1, Number(index)));
     steps.forEach((step, i) => step.hidden = i !== currentStep);
-    stepButtons.forEach((button, i) => {
-      button.classList.toggle('active', i === currentStep);
-      button.classList.toggle('complete', i < currentStep);
-      button.setAttribute('aria-current', i === currentStep ? 'step' : 'false');
-    });
+    updateStepButtonStates();
     previousButton.disabled = currentStep === 0;
     nextButton.hidden = currentStep === steps.length - 1;
     generateButton.hidden = currentStep !== steps.length - 1;
     if (currentStep === steps.length - 1) renderReview();
-    document.querySelector('.wizard-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (scroll) {
+      const reduceMotion = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+      steps[currentStep].scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    }
   }
 
   function visibleRequiredErrors() {
     const current = steps[currentStep];
     const errors = [];
     current.querySelectorAll('[required]:not(:disabled)').forEach(control => {
-      control.removeAttribute('aria-invalid');
       if (!String(control.value || '').trim()) {
         control.setAttribute('aria-invalid', 'true');
         errors.push(control);
       }
     });
     return errors;
+  }
+
+  function validateCurrentStep() {
+    const validation = validate(buildSpec());
+    updateFieldErrors(validation);
+    const missing = visibleRequiredErrors();
+    const issues = validation.errors.filter(issue => {
+      const fieldName = issueField(issue);
+      const control = fieldName ? field(fieldName) : null;
+      return control?.closest?.('.wizard-step') === steps[currentStep];
+    });
+    return { missing, issues };
   }
 
   function updateFieldErrors(validation) {
@@ -429,13 +524,21 @@
 
   function summaryEntries(spec) {
     const components = [spec.frontend.enabled && 'Frontend', spec.backend.enabled && 'Backend', spec.database.mode !== 'none' && 'PostgreSQL'].filter(Boolean).join('＋') || 'PostgreSQL';
+    const nodePortSummary = (() => {
+      if (spec.exposure.mode !== 'nodeport') return '';
+      const entries = [];
+      if (spec.frontend.enabled) entries.push(`Frontend ${spec.exposure.nodePorts.frontend || '自動'}`);
+      if (spec.backend.enabled) entries.push(`Backend ${spec.exposure.nodePorts.backend || '自動'}`);
+      if (!spec.frontend.enabled && !spec.backend.enabled && spec.database.mode === 'internal') entries.push(`PostgreSQL ${spec.exposure.nodePorts.database || '自動'}`);
+      return `NodePort（${entries.join('、')}）`;
+    })();
     return [
       ['範本', templateLabels[spec.template] || spec.template],
       ['應用', spec.project.name || '—'],
       ['Namespace', spec.project.namespace || '—'],
       ['環境', spec.project.environment],
       ['元件', components],
-      ['入口', ({ clusterip: 'ClusterIP', ingress: 'Ingress', loadbalancer: 'LoadBalancer' })[spec.exposure.mode] || spec.exposure.mode],
+      ['入口', ({ clusterip: 'ClusterIP', nodeport: nodePortSummary, ingress: 'Ingress', loadbalancer: 'LoadBalancer' })[spec.exposure.mode] || spec.exposure.mode],
       ['資料庫', ({ none: '無', internal: '內建單副本', external: '外部 PostgreSQL' })[spec.database.mode]]
     ];
   }
@@ -514,9 +617,12 @@
       return;
     }
     try {
-      generated.yaml = generatedText('generateManifest', spec);
-      generated.tutorial = generatedText('generateTutorial', spec);
-      generated.json = generatedText('generateQuestionnaireJson', spec);
+      const nextGenerated = {
+        yaml: generatedText('generateManifest', spec),
+        tutorial: generatedText('generateTutorial', spec),
+        json: generatedText('generateQuestionnaireJson', spec)
+      };
+      generated = nextGenerated;
       document.getElementById('yamlOutput').textContent = generated.yaml;
       document.getElementById('tutorialOutput').textContent = generated.tutorial;
       document.getElementById('jsonOutput').textContent = generated.json;
@@ -524,7 +630,7 @@
       window.KubeManifestPilotSite?.toast('Manifest、Questionnaire JSON 與部署教學已產生。');
       saveDraft(true);
     } catch (error) {
-      document.getElementById('outputStatus').textContent = `產生失敗：${error.message}`;
+      clearGeneratedOutput(`產生失敗：${error.message}`, '產生失敗，請修正設定後重新產生。');
       window.KubeManifestPilotSite?.toast(`產生失敗：${error.message}`);
     }
   }
@@ -539,6 +645,23 @@
     document.getElementById('yamlOutput').hidden = name !== 'yaml';
     document.getElementById('tutorialOutput').hidden = name !== 'tutorial';
     document.getElementById('jsonOutput').hidden = name !== 'json';
+  }
+
+  function clearGeneratedOutput(status = '尚未產生', preview = '完成問卷後按下「檢查並產生」。') {
+    generated = { yaml: '', tutorial: '', json: '' };
+    document.getElementById('yamlOutput').textContent = preview;
+    document.getElementById('tutorialOutput').textContent = '';
+    document.getElementById('jsonOutput').textContent = '';
+    document.getElementById('outputStatus').textContent = status;
+    setOutputTab('yaml');
+  }
+
+  function invalidateGeneratedOutput() {
+    if (!generated.yaml && !generated.tutorial && !generated.json) return;
+    clearGeneratedOutput(
+      '設定已變更，請重新檢查並產生',
+      '問卷設定已變更；舊產物已作廢，請重新按下「檢查並產生」。'
+    );
   }
 
   async function copyText(text) {
@@ -584,13 +707,15 @@
     'frontendCpuRequest', 'frontendCpuLimit', 'frontendMemoryRequest', 'frontendMemoryLimit',
     'frontendReadinessType', 'frontendReadinessPath', 'frontendLiveness', 'frontendLivenessPath',
     'frontendStartup', 'frontendStartupType', 'frontendStartupPath',
+    'frontendNodeSelector',
     'backendName', 'backendImage', 'backendPort', 'backendServicePort', 'backendReplicas',
     'backendCpuRequest', 'backendCpuLimit', 'backendMemoryRequest', 'backendMemoryLimit',
     'backendReadinessType', 'backendReadinessPath', 'backendLiveness', 'backendLivenessPath',
     'backendStartup', 'backendStartupType', 'backendStartupPath',
+    'backendNodeSelector',
     'databaseMode', 'databaseName', 'databaseImage', 'databasePort', 'postgresDatabase', 'postgresUser',
-    'pvcSize', 'storageClassName', 'externalPort', 'externalDatabase', 'externalUser',
-    'exposureMode', 'ingressClassName', 'hostname', 'tlsEnabled', 'createPdb', 'hpaEnabled', 'hpaMin', 'hpaMax', 'hpaCpu'
+    'pvcSize', 'storageClassName', 'databaseNodeSelector', 'externalPort', 'externalDatabase', 'externalUser',
+    'exposureMode', 'frontendNodePort', 'backendNodePort', 'databaseNodePort', 'ingressClassName', 'hostname', 'tlsEnabled', 'createPdb', 'hpaEnabled', 'hpaMin', 'hpaMax', 'hpaCpu'
   ]);
 
   function saveDraft(silent = false) {
@@ -624,18 +749,46 @@
           Array.from(controls).forEach(control => control.checked = control.value === stored);
         } else if (controls.type === 'checkbox') controls.checked = Boolean(stored);
         else controls.value = stored;
+        dirtyFields.add(name);
       });
       window.KubeManifestPilotSite?.toast('已恢復此瀏覽器中的非敏感問卷草稿。');
     } catch (_) { /* Ignore damaged storage. */ }
   }
 
-  function applyTemplateFromUrl() {
+  function applyUrlOverrides() {
+    const applied = { template: false, project: false, environment: false };
     try {
-      const requested = new URLSearchParams(window.location.search).get('template');
-      if (!requested || !templateRules[requested]) return;
-      const control = form.querySelector(`input[name="template"][value="${CSS.escape(requested)}"]`);
-      if (control) control.checked = true;
-    } catch (_) { /* URL parameters are optional. */ }
+      const url = new URL(window.location.href);
+      const requestedTemplate = url.searchParams.get('template') || '';
+      const requestedProject = url.searchParams.get('project') || '';
+      const requestedEnvironment = (url.searchParams.get('environment') || '').toUpperCase();
+      const validProject = /^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$/;
+
+      if (Object.prototype.hasOwnProperty.call(templateRules, requestedTemplate)) {
+        const control = Array.from(form.querySelectorAll('input[name="template"]'))
+          .find(item => item.value === requestedTemplate);
+        if (control) {
+          control.checked = true;
+          dirtyFields.add('template');
+          applied.template = true;
+        }
+      }
+      if (validProject.test(requestedProject)) {
+        field('projectName').value = requestedProject;
+        dirtyFields.add('projectName');
+        applied.project = true;
+      }
+      if (requestedEnvironment === 'DEV' || requestedEnvironment === 'PRODUCTION') {
+        field('environment').value = requestedEnvironment;
+        dirtyFields.add('environment');
+        applied.environment = true;
+      }
+
+      if (url.search) {
+        window.history.replaceState(window.history.state, '', url.pathname + url.hash);
+      }
+    } catch (_) { /* URL parameters are optional and never required to use the generator. */ }
+    return applied;
   }
 
   function resetDraft() {
@@ -643,14 +796,17 @@
     try { localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(LEGACY_STORAGE_KEY); } catch (_) { /* continue */ }
     form.reset();
     dirtyFields.clear();
-    generated = { yaml: '', tutorial: '', json: '' };
-    applyTemplate();
+    completedSteps.clear();
+    clearGeneratedOutput();
+    applyTemplate(true);
     updateConditionalFields();
     showStep(0);
     window.KubeManifestPilotSite?.toast('問卷已恢復預設值。');
   }
 
   form.addEventListener('input', event => {
+    invalidateGeneratedOutput();
+    invalidateCompletedForControl(event.target);
     if (event.target.name) dirtyFields.add(event.target.name);
     if (event.target.name === 'environment') applyEnvironmentDefaults();
     if (event.target.name === 'projectName' && !dirtyFields.has('namespace')) applyEnvironmentDefaults();
@@ -658,7 +814,9 @@
     updateSummary();
   });
   form.addEventListener('change', event => {
-    if (event.target.name === 'template') applyTemplate();
+    invalidateGeneratedOutput();
+    invalidateCompletedForControl(event.target);
+    if (event.target.name === 'template') applyTemplate(true);
     if (event.target.name === 'databaseMode') updateDatabasePanels();
     if (event.target.name === 'environment') applyEnvironmentDefaults();
     updateConditionalFields();
@@ -668,12 +826,15 @@
   stepButtons.forEach(button => button.addEventListener('click', () => showStep(Number(button.dataset.stepTarget))));
   previousButton.addEventListener('click', () => showStep(currentStep - 1));
   nextButton.addEventListener('click', () => {
-    const missing = visibleRequiredErrors();
-    if (missing.length) {
-      missing[0].focus();
-      window.KubeManifestPilotSite?.toast('請完成目前步驟的必要欄位。');
+    const result = validateCurrentStep();
+    if (result.missing.length || result.issues.length) {
+      const issueFieldName = result.issues.length ? issueField(result.issues[0]) : '';
+      const focusTarget = result.missing[0] || (issueFieldName ? field(issueFieldName) : null);
+      focusTarget?.focus();
+      window.KubeManifestPilotSite?.toast('請修正目前步驟的必要欄位與阻擋錯誤。');
       return;
     }
+    completedSteps.add(currentStep);
     showStep(currentStep + 1);
   });
   generateButton.addEventListener('click', generate);
@@ -705,11 +866,15 @@
   });
 
   restoreDraft();
-  applyTemplateFromUrl();
-  applyTemplate();
+  const urlOverrides = applyUrlOverrides();
+  applyTemplate(urlOverrides.template);
+  if (urlOverrides.project || urlOverrides.environment) applyEnvironmentDefaults();
   updateConditionalFields();
   updateSummary();
-  showStep(0);
+  showStep(0, false);
+  if (urlOverrides.template || urlOverrides.project || urlOverrides.environment) {
+    window.KubeManifestPilotSite?.toast('已套用首頁快速開始設定；URL 參數優先於本機草稿。');
+  }
   if (!Engine) {
     document.getElementById('liveStatus').className = 'status-box danger';
     document.getElementById('liveStatus').textContent = 'Manifest 產生核心載入失敗。';

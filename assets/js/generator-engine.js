@@ -18,7 +18,7 @@
 }(typeof window !== "undefined" ? window : (typeof globalThis !== "undefined" ? globalThis : this), function () {
   "use strict";
 
-  var ENGINE_VERSION = "1.0.0";
+  var ENGINE_VERSION = "1.1.0";
   var SCHEMA_VERSION = "1.0";
   var TICK = String.fromCharCode(96);
   var FENCE = String.fromCharCode(96, 96, 96);
@@ -234,6 +234,7 @@
       args: normalizeStringArray(source.args),
       env: normalizeEnv(source.env),
       configValues: sortedRecord(firstDefined([source.configValues, source.config], {})),
+      nodeSelector: sortedRecord(source.nodeSelector),
       imagePullSecret: lowerText(pullSecret, ""),
       readiness: normalizeProbe(source.readiness, "/healthz"),
       liveness: normalizeProbe(source.liveness, "/healthz"),
@@ -265,6 +266,27 @@
     var tlsSource = isObject(exposureSource.tls) ? exposureSource.tls : {};
     var databaseMode = lowerText(databaseSource.mode, preset.databaseMode);
     var databaseName = lowerText(databaseSource.name, projectName + "-postgresql");
+    var exposureMode = lowerText(firstDefined([exposureSource.mode, exposureSource.type], "clusterip"));
+    var frontend = normalizeComponent(
+      "frontend",
+      firstDefined([source.frontend, components.frontend], {}),
+      projectName,
+      preset.frontend
+    );
+    var backend = normalizeComponent(
+      "backend",
+      firstDefined([source.backend, components.backend], {}),
+      projectName,
+      preset.backend
+    );
+    var hasNodePortsMap = isObject(exposureSource.nodePorts);
+    var nodePortsSource = hasNodePortsMap ? exposureSource.nodePorts : {};
+    var legacyNodePort = integerValue(exposureSource.nodePort, 0);
+    var nodePorts = {
+      frontend: integerValue(nodePortsSource.frontend, 0),
+      backend: integerValue(nodePortsSource.backend, 0),
+      database: integerValue(nodePortsSource.database, 0)
+    };
     var databaseResources = normalizeResources(databaseSource.resources, {
       cpuRequest: "100m",
       cpuLimit: "1",
@@ -274,6 +296,30 @@
 
     if (environment === "PROD") {
       environment = "PRODUCTION";
+    }
+    if (!hasNodePortsMap) {
+      if (frontend.enabled) {
+        nodePorts.frontend = legacyNodePort;
+      } else if (backend.enabled) {
+        nodePorts.backend = legacyNodePort;
+      } else if (databaseMode === "internal") {
+        nodePorts.database = legacyNodePort;
+      }
+    }
+    if (exposureMode !== "nodeport") {
+      nodePorts.frontend = 0;
+      nodePorts.backend = 0;
+      nodePorts.database = 0;
+    } else {
+      if (!frontend.enabled) {
+        nodePorts.frontend = 0;
+      }
+      if (!backend.enabled) {
+        nodePorts.backend = 0;
+      }
+      if (frontend.enabled || backend.enabled || databaseMode !== "internal") {
+        nodePorts.database = 0;
+      }
     }
 
     return {
@@ -285,18 +331,8 @@
         environment: environment,
         createNamespace: booleanValue(projectSource.createNamespace, true)
       },
-      frontend: normalizeComponent(
-        "frontend",
-        firstDefined([source.frontend, components.frontend], {}),
-        projectName,
-        preset.frontend
-      ),
-      backend: normalizeComponent(
-        "backend",
-        firstDefined([source.backend, components.backend], {}),
-        projectName,
-        preset.backend
-      ),
+      frontend: frontend,
+      backend: backend,
       database: {
         mode: databaseMode,
         name: databaseName,
@@ -319,14 +355,20 @@
         userKey: text(databaseSource.userKey, "POSTGRES_USER"),
         databaseKey: text(databaseSource.databaseKey, "POSTGRES_DB"),
         resources: databaseResources,
+        nodeSelector: sortedRecord(databaseSource.nodeSelector),
         imagePullSecret: lowerText(databaseSource.imagePullSecret, "")
       },
       exposure: {
-        mode: lowerText(firstDefined([exposureSource.mode, exposureSource.type], "clusterip")),
-        ingressClassName: lowerText(exposureSource.ingressClassName, ""),
-        hostname: lowerText(firstDefined([exposureSource.hostname, exposureSource.host], "")),
-        tls: booleanValue(firstDefined([tlsSource.enabled, exposureSource.tls], false), false),
-        tlsSecretName: lowerText(firstDefined([exposureSource.tlsSecretName, tlsSource.secretName], ""))
+        mode: exposureMode,
+        nodePorts: nodePorts,
+        ingressClassName: exposureMode === "ingress" ? lowerText(exposureSource.ingressClassName, "") : "",
+        hostname: exposureMode === "ingress" ? lowerText(firstDefined([exposureSource.hostname, exposureSource.host], "")) : "",
+        tls: exposureMode === "ingress" ?
+          booleanValue(firstDefined([tlsSource.enabled, exposureSource.tls], false), false) :
+          false,
+        tlsSecretName: exposureMode === "ingress" ?
+          lowerText(firstDefined([exposureSource.tlsSecretName, tlsSource.secretName], "")) :
+          ""
       },
       options: {
         createPdb: booleanValue(optionsSource.createPdb, false),
@@ -413,6 +455,50 @@
 
   function isConfigKey(value) {
     return isSecretKey(value);
+  }
+
+  function isLabelName(value) {
+    return typeof value === "string" &&
+      value.length >= 1 &&
+      value.length <= 63 &&
+      /^[A-Za-z0-9](?:[-_.A-Za-z0-9]*[A-Za-z0-9])?$/.test(value);
+  }
+
+  function isLabelKey(value) {
+    var parts;
+    if (typeof value !== "string" || !value || value.length > 317) {
+      return false;
+    }
+    parts = value.split("/");
+    if (parts.length === 1) {
+      return isLabelName(parts[0]);
+    }
+    return parts.length === 2 && isDnsSubdomain(parts[0]) && isLabelName(parts[1]);
+  }
+
+  function isLabelValue(value) {
+    return typeof value === "string" &&
+      (value.length === 0 ||
+        (value.length <= 63 && /^[A-Za-z0-9](?:[-_.A-Za-z0-9]*[A-Za-z0-9])?$/.test(value)));
+  }
+
+  function validateNodeSelector(nodeSelector, path, errors) {
+    Object.keys(nodeSelector).forEach(function (key) {
+      if (!isLabelKey(key)) {
+        errors.push(issue(
+          "INVALID_NODE_SELECTOR_KEY",
+          path + "." + key,
+          "nodeSelector Key 必須是有效的 Kubernetes label key。"
+        ));
+      }
+      if (!isLabelValue(nodeSelector[key])) {
+        errors.push(issue(
+          "INVALID_NODE_SELECTOR_VALUE",
+          path + "." + key,
+          "nodeSelector Value 必須為空字串或 1–63 字元的 Kubernetes label value。"
+        ));
+      }
+    });
   }
 
   function isEnvironmentName(value) {
@@ -664,6 +750,7 @@
     if (component.imagePullSecret && !isDnsSubdomain(component.imagePullSecret)) {
       errors.push(issue("INVALID_SECRET_NAME", path + ".imagePullSecret", "Image Pull Secret 名稱不是有效的 DNS subdomain。"));
     }
+    validateNodeSelector(component.nodeSelector, path + ".nodeSelector", errors);
 
     Object.keys(component.configValues).forEach(function (key) {
       if (!isConfigKey(key)) {
@@ -776,6 +863,7 @@
       if (database.imagePullSecret && !isDnsSubdomain(database.imagePullSecret)) {
         errors.push(issue("INVALID_SECRET_NAME", path + ".imagePullSecret", "Image Pull Secret 名稱格式無效。"));
       }
+      validateNodeSelector(database.nodeSelector, path + ".nodeSelector", errors);
       warnings.push(issue(
         "POSTGRESQL_SINGLE_REPLICA",
         path + ".mode",
@@ -799,14 +887,61 @@
   function validateExposure(spec, errors, warnings) {
     var exposure = spec.exposure;
     var hasApplication = spec.frontend.enabled || spec.backend.enabled;
+    var hasInternalDatabase = spec.database.mode === "internal";
+    var activeNodePorts = [];
+    var configuredNodePorts = [];
 
-    if (["clusterip", "ingress", "loadbalancer"].indexOf(exposure.mode) === -1) {
-      errors.push(issue("INVALID_EXPOSURE_MODE", "exposure.mode", "對外方式必須是 clusterip、ingress 或 loadbalancer。"));
+    if (["clusterip", "ingress", "loadbalancer", "nodeport"].indexOf(exposure.mode) === -1) {
+      errors.push(issue("INVALID_EXPOSURE_MODE", "exposure.mode", "對外方式必須是 clusterip、ingress、loadbalancer 或 nodeport。"));
       return;
     }
 
-    if (!hasApplication && exposure.mode !== "clusterip") {
+    if (!hasApplication && (exposure.mode === "ingress" || exposure.mode === "loadbalancer")) {
       errors.push(issue("EXPOSURE_TARGET_REQUIRED", "exposure.mode", "Ingress 或 LoadBalancer 至少需要一個應用元件。"));
+    }
+    if (exposure.mode === "nodeport" && !hasApplication && !hasInternalDatabase) {
+      errors.push(issue(
+        "EXPOSURE_TARGET_REQUIRED",
+        "exposure.mode",
+        "NodePort 至少需要一個應用元件，或僅含內建 PostgreSQL 的範本。"
+      ));
+    }
+    if (exposure.mode === "nodeport") {
+      Object.keys(exposure.nodePorts).forEach(function (role) {
+        var nodePort = exposure.nodePorts[role];
+        if (!Number.isInteger(nodePort) ||
+            (nodePort !== 0 && (nodePort < 30000 || nodePort > 32767))) {
+          errors.push(issue(
+            "INVALID_NODE_PORT",
+            "exposure.nodePorts." + role,
+            "NodePort 必須是 0（由叢集自動配置）或預設範圍 30000–32767 的整數。"
+          ));
+        }
+        if (Number.isInteger(nodePort) && nodePort > 0) {
+          configuredNodePorts.push({ role: role, value: nodePort });
+        }
+      });
+      configuredNodePorts.forEach(function (entry, index) {
+        configuredNodePorts.slice(0, index).forEach(function (previous) {
+          if (previous.value === entry.value) {
+            errors.push(issue(
+              "DUPLICATE_NODE_PORT",
+              "exposure.nodePorts." + entry.role,
+              "手動指定的 NodePort 不得與另一個角色重複。",
+              { nodePort: entry.value, roles: [previous.role, entry.role] }
+            ));
+          }
+        });
+      });
+      if (spec.frontend.enabled) {
+        activeNodePorts.push({ role: "frontend", value: exposure.nodePorts.frontend });
+      }
+      if (spec.backend.enabled) {
+        activeNodePorts.push({ role: "backend", value: exposure.nodePorts.backend });
+      }
+      if (!hasApplication && hasInternalDatabase) {
+        activeNodePorts.push({ role: "database", value: exposure.nodePorts.database });
+      }
     }
 
     if (exposure.mode === "ingress") {
@@ -832,6 +967,28 @@
         "exposure.mode",
         "LoadBalancer 需要叢集或雲端供應商提供實作。"
       ));
+    }
+
+    if (exposure.mode === "nodeport") {
+      warnings.push(issue(
+        "NODEPORT_NETWORK_EXPOSURE",
+        "exposure.mode",
+        "NodePort 可能在每個 Node 網路介面開放連線，請同步限制防火牆、安全群組與來源網段。"
+      ));
+      if (activeNodePorts.some(function (entry) { return entry.value === 0; })) {
+        warnings.push(issue(
+          "NODEPORT_AUTO_ALLOCATION",
+          "exposure.nodePorts",
+          "NodePort 為 0 時不寫入 Manifest，實際 Port 由叢集從 Service NodePort 範圍配置。"
+        ));
+      }
+      if (spec.frontend.enabled && spec.backend.enabled) {
+        warnings.push(issue(
+          "NODEPORT_SEPARATE_SERVICES",
+          "exposure.mode",
+          "Frontend 與 Backend 會使用不同 NodePort；此模式不會建立路徑路由或反向代理。"
+        ));
+      }
     }
   }
 
@@ -1204,6 +1361,9 @@
     if (component.imagePullSecret) {
       podSpec.imagePullSecrets = [{ name: component.imagePullSecret }];
     }
+    if (Object.keys(component.nodeSelector).length > 0) {
+      podSpec.nodeSelector = sortedRecord(component.nodeSelector);
+    }
 
     return {
       apiVersion: "apps/v1",
@@ -1230,19 +1390,31 @@
 
   function buildService(spec, component, role) {
     var isPublic = exposedRole(spec) === role;
+    var serviceType = "ClusterIP";
+    var servicePort = {
+      name: "http",
+      protocol: "TCP",
+      port: component.servicePort,
+      targetPort: "http"
+    };
+
+    if (isPublic && spec.exposure.mode === "loadbalancer") {
+      serviceType = "LoadBalancer";
+    } else if (spec.exposure.mode === "nodeport") {
+      serviceType = "NodePort";
+      if (spec.exposure.nodePorts[role] > 0) {
+        servicePort.nodePort = spec.exposure.nodePorts[role];
+      }
+    }
+
     return {
       apiVersion: "v1",
       kind: "Service",
       metadata: metadata(spec, component.name, role),
       spec: {
-        type: isPublic && spec.exposure.mode === "loadbalancer" ? "LoadBalancer" : "ClusterIP",
+        type: serviceType,
         selector: selectorLabels(spec, component.name, role),
-        ports: [{
-          name: "http",
-          protocol: "TCP",
-          port: component.servicePort,
-          targetPort: "http"
-        }]
+        ports: [servicePort]
       }
     };
   }
@@ -1250,6 +1422,13 @@
   function buildPostgresResources(spec) {
     var database = spec.database;
     var labels = selectorLabels(spec, database.name, "database");
+    var exposeDatabase = !exposedRole(spec) && spec.exposure.mode === "nodeport";
+    var databaseServicePort = {
+      name: "postgresql",
+      protocol: "TCP",
+      port: database.port,
+      targetPort: "postgresql"
+    };
     var claimSpec = {
       accessModes: ["ReadWriteOnce"],
       resources: {
@@ -1304,6 +1483,12 @@
     if (database.imagePullSecret) {
       podSpec.imagePullSecrets = [{ name: database.imagePullSecret }];
     }
+    if (Object.keys(database.nodeSelector).length > 0) {
+      podSpec.nodeSelector = sortedRecord(database.nodeSelector);
+    }
+    if (exposeDatabase && spec.exposure.nodePorts.database > 0) {
+      databaseServicePort.nodePort = spec.exposure.nodePorts.database;
+    }
 
     return [{
       apiVersion: "v1",
@@ -1325,14 +1510,9 @@
       kind: "Service",
       metadata: metadata(spec, database.name, "database"),
       spec: {
-        type: "ClusterIP",
+        type: exposeDatabase ? "NodePort" : "ClusterIP",
         selector: labels,
-        ports: [{
-          name: "postgresql",
-          protocol: "TCP",
-          port: database.port,
-          targetPort: "postgresql"
-        }]
+        ports: [databaseServicePort]
       }
     }, {
       apiVersion: "apps/v1",
@@ -1591,13 +1771,13 @@
   var KEY_ORDER = [
     "apiVersion", "kind", "metadata", "name", "namespace", "labels", "annotations",
     "spec", "data", "type", "replicas", "serviceName", "selector", "matchLabels",
-    "template", "containers", "initContainers", "imagePullSecrets", "securityContext",
+    "template", "containers", "initContainers", "imagePullSecrets", "nodeSelector", "securityContext",
     "containers", "image", "imagePullPolicy", "command", "args", "ports", "containerPort",
     "protocol", "envFrom", "env", "value", "valueFrom", "secretKeyRef", "configMapRef",
     "readinessProbe", "livenessProbe", "startupProbe", "httpGet", "tcpSocket", "exec",
     "path", "port", "resources", "requests", "limits", "volumeMounts", "volumes",
     "volumeClaimTemplates", "accessModes", "storageClassName", "storage", "clusterIP",
-    "publishNotReadyAddresses", "targetPort", "rules", "host", "http", "paths", "pathType",
+    "publishNotReadyAddresses", "targetPort", "nodePort", "rules", "host", "http", "paths", "pathType",
     "backend", "service", "ingressClassName", "tls", "hosts", "secretName",
     "scaleTargetRef", "minReplicas", "maxReplicas", "metrics", "resource", "target",
     "averageUtilization", "minAvailable"
@@ -1839,7 +2019,7 @@
         purpose: "PostgreSQL 連線"
       });
     }
-    if (spec.exposure.tls) {
+    if (spec.exposure.mode === "ingress" && spec.exposure.tls) {
       references.push({
         name: spec.exposure.tlsSecretName,
         keys: ["tls.crt", "tls.key"],
@@ -1911,6 +2091,67 @@
     return commands;
   }
 
+  function nodeSelectorRequirements(spec) {
+    var requirements = [];
+
+    [{
+      component: spec.backend,
+      label: spec.backend.name
+    }, {
+      component: spec.frontend,
+      label: spec.frontend.name
+    }].forEach(function (entry) {
+      if (entry.component.enabled && Object.keys(entry.component.nodeSelector).length > 0) {
+        requirements.push({
+          workload: entry.label,
+          selector: entry.component.nodeSelector
+        });
+      }
+    });
+    if (spec.database.mode === "internal" && Object.keys(spec.database.nodeSelector).length > 0) {
+      requirements.push({
+        workload: spec.database.name,
+        selector: spec.database.nodeSelector
+      });
+    }
+    return requirements;
+  }
+
+  function nodeSelectorCliValue(nodeSelector) {
+    return Object.keys(nodeSelector).sort().map(function (key) {
+      return key + "=" + nodeSelector[key];
+    }).join(",");
+  }
+
+  function nodePortTutorialTargets(spec) {
+    var targets = [];
+    if (spec.exposure.mode !== "nodeport") {
+      return targets;
+    }
+    if (spec.frontend.enabled) {
+      targets.push({
+        role: "Frontend",
+        name: spec.frontend.name,
+        nodePort: spec.exposure.nodePorts.frontend
+      });
+    }
+    if (spec.backend.enabled) {
+      targets.push({
+        role: "Backend",
+        name: spec.backend.name,
+        nodePort: spec.exposure.nodePorts.backend
+      });
+    }
+    if (targets.length === 0 && spec.database.mode === "internal") {
+      targets.push({
+        role: "PostgreSQL",
+        name: spec.database.name,
+        nodePort: spec.exposure.nodePorts.database
+      });
+    }
+    return targets;
+  }
+
   function generateTutorial(input, providedResources) {
     var report = assertValid(input);
     var spec = report.spec;
@@ -1921,6 +2162,8 @@
     var statefulSets = resourceNames(resources, "StatefulSet");
     var services = resourceNames(resources, "Service");
     var secrets = referencedSecrets(spec);
+    var selectorRequirements = nodeSelectorRequirements(spec);
+    var nodePortTargets = nodePortTutorialTargets(spec);
     var lines = [];
     var exposed = exposedRole(spec);
     var target = exposed ? spec[exposed] : null;
@@ -1942,6 +2185,9 @@
     lines.push("- StatefulSet：" + (statefulSets.length ? statefulSets.map(function (name) { return TICK + name + TICK; }).join("、") : "無"));
     lines.push("- Service：" + (services.length ? services.map(function (name) { return TICK + name + TICK; }).join("、") : "無"));
     lines.push("- 對外方式：" + TICK + spec.exposure.mode + TICK);
+    if (selectorRequirements.length > 0) {
+      lines.push("- 有 " + selectorRequirements.length + " 個工作負載使用 nodeSelector；只有符合全部 labels 的 Node 才能排程 Pod。");
+    }
     if (spec.database.mode === "internal") {
       lines.push("- 內建 PostgreSQL 固定為單副本、非 HA，且不包含自動備份、故障切換或災難復原。");
       lines.push("- StatefulSet 建立的 PVC 預設不會因刪除 StatefulSet 而移除。");
@@ -1977,6 +2223,9 @@
     lines.push("");
     if (spec.database.mode === "internal") {
       lines.push("- 叢集必須有可動態供應 " + TICK + spec.database.pvcSize + TICK + " ReadWriteOnce PVC 的 StorageClass。");
+      if (Object.keys(spec.database.nodeSelector).length > 0) {
+        lines.push("- PostgreSQL 使用 nodeSelector；請確認 StorageClass、PV node affinity 與目標 Node topology 相容，否則 Pod 或 PVC 可能 Pending。");
+      }
       addCode(lines, ["kubectl get storageclass"]);
     }
     if (spec.database.mode === "external") {
@@ -1989,10 +2238,38 @@
     if (spec.exposure.mode === "loadbalancer") {
       lines.push("- 叢集或雲端供應商必須支援 Service type LoadBalancer。");
     }
+    if (spec.exposure.mode === "nodeport") {
+      lines.push("- NodePort 可能在每個 Node 的網路介面開放服務；部署前請確認防火牆、安全群組與允許的來源網段。");
+      if (spec.frontend.enabled && spec.backend.enabled) {
+        lines.push("- Frontend 與 Backend 會各自建立 NodePort Service；NodePort 本身不提供 Host 或 Path 路由。");
+      }
+      if (!target && spec.database.mode === "internal") {
+        lines.push("- 此設定會直接公開 PostgreSQL 主 Service。除受控的開發網路外，不建議把資料庫 NodePort 暴露到公網。");
+      }
+      addCode(lines, ["kubectl get nodes --output wide"]);
+    }
     if (spec.options.hpa.enabled) {
       addCode(lines, ["kubectl get --raw /apis/metrics.k8s.io/v1beta1"]);
     }
-    if (spec.database.mode === "none" && spec.exposure.mode === "clusterip" && !spec.options.hpa.enabled) {
+    if (selectorRequirements.length > 0) {
+      lines.push("");
+      lines.push("nodeSelector 是強制排程條件。部署前確認至少一個 Node 同時符合各工作負載要求：");
+      selectorRequirements.forEach(function (requirement) {
+        lines.push("- " + TICK + requirement.workload + TICK + "：" +
+          Object.keys(requirement.selector).sort().map(function (key) {
+            return TICK + key + "=" + requirement.selector[key] + TICK;
+          }).join("、"));
+      });
+      lines.push("查不到符合的 Node 時，Pod 會維持 Pending；符合多個 Node 時，nodeSelector 不會把 Pod 固定到單一 Node，仍由 Scheduler 決定。");
+      lines.push("產生器不會新增或修改 Node labels；若查不到結果，請由叢集管理者依既有變更流程標記 Node 後再驗證。");
+      addCode(lines, selectorRequirements.map(function (requirement) {
+        return "kubectl get nodes --selector='" + nodeSelectorCliValue(requirement.selector) + "' --output wide";
+      }));
+    }
+    if (spec.database.mode === "none" &&
+        spec.exposure.mode === "clusterip" &&
+        !spec.options.hpa.enabled &&
+        selectorRequirements.length === 0) {
       lines.push("- 此設定沒有額外的 Controller、CRD 或外部資料庫前提。");
     }
 
@@ -2045,6 +2322,7 @@
     lines.push("## 7. 驗證資源與連線");
     addCode(lines, [
       "kubectl --namespace " + namespace + " get pods,services,endpointslices,persistentvolumeclaims,ingresses,horizontalpodautoscalers,poddisruptionbudgets",
+      "kubectl --namespace " + namespace + " get pods --output wide",
       "kubectl --namespace " + namespace + " get events --sort-by=.lastTimestamp"
     ]);
     if (spec.exposure.mode === "clusterip") {
@@ -2061,6 +2339,36 @@
           "kubectl --namespace " + namespace + " port-forward service/" + spec.database.name + " " + spec.database.port + ":" + spec.database.port
         ]);
       }
+    } else if (spec.exposure.mode === "nodeport") {
+      lines.push("");
+      lines.push("NodePort 模式會為每個需要對外的 Service 建立獨立入口；Port 為 0 的項目由叢集自動配置。");
+      nodePortTargets.forEach(function (nodePortTarget) {
+        if (nodePortTarget.nodePort > 0) {
+          lines.push("- " + nodePortTarget.role + " Service " + TICK + nodePortTarget.name +
+            TICK + "：固定 NodePort " + TICK + nodePortTarget.nodePort + TICK);
+        } else {
+          lines.push("- " + nodePortTarget.role + " Service " + TICK + nodePortTarget.name +
+            TICK + "：NodePort 由叢集自動配置");
+        }
+      });
+      if (spec.frontend.enabled && spec.backend.enabled) {
+        lines.push("Frontend 與 Backend 使用不同 NodePort；此模式不會像 Ingress 建立 " +
+          TICK + "/api" + TICK + " 路徑路由，也不會設定反向代理。");
+      }
+      if (!target && spec.database.mode === "internal") {
+        lines.push("警告：這是 PostgreSQL 主 Service 的 NodePort。請只允許受信任來源，切勿直接暴露到公網。");
+      }
+      lines.push("先從 Service 讀取實際 NodePort，再從 Node 清單選擇可達的 Node 位址；可達性仍受 kube-proxy、CNI 與防火牆影響。");
+      addCode(lines, nodePortTargets.reduce(function (commands, nodePortTarget) {
+        commands.push(
+          "kubectl --namespace " + namespace + " get service " + nodePortTarget.name + " --output wide"
+        );
+        commands.push(
+          "kubectl --namespace " + namespace + " get service " + nodePortTarget.name +
+          " --output jsonpath='{.spec.ports[0].nodePort}{\"\\n\"}'"
+        );
+        return commands;
+      }, []).concat(["kubectl get nodes --output wide"]));
     } else if (spec.exposure.mode === "ingress") {
       lines.push("");
       lines.push("確認 DNS 指向 Ingress Controller，再存取 " +

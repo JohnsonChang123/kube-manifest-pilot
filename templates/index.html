@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="KubeManifestPilot 提供六種 guided Kubernetes YAML manifest templates，透過問卷產生設定檔與部署教學，不連線或修改 Kubernetes 叢集。">
   <meta name="theme-color" content="#0b1220">
+  <link rel="canonical" href="https://johnsonchang123.github.io/kube-manifest-pilot/templates/">
   <title>Kubernetes Manifest 範本｜KubeManifestPilot</title>
+  <script src="../assets/js/theme-init.js"></script>
   <link rel="stylesheet" href="../assets/css/site.css">
 </head>
 <body class="site-page">
@@ -23,6 +25,7 @@
         <a href="../templates/" aria-current="page">範本</a>
         <a href="../designer/">架構設計工具</a>
       </nav>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="切換為深色模式" aria-pressed="false"><span data-theme-icon aria-hidden="true">☾</span><span data-theme-label>深色</span></button>
     </div>
   </header>
 
@@ -44,7 +47,7 @@
       <div class="section-heading">
         <p class="eyebrow">Guided Questionnaire Presets</p>
         <h2 id="template-list-title">六種第一版範本</h2>
-        <p>範本只提供合理預設值與條件式問題；輸出內容仍以你的回答為準。</p>
+        <p>範本只提供合理預設值與條件式問題；輸出內容仍以你的回答為準。六種範本都能選擇 NodePort（不建立 Ingress）與既有 Node label 的排程限制。</p>
       </div>
 
       <div class="card-grid template-grid">
@@ -56,7 +59,7 @@
           <ul>
             <li>Namespace、Frontend Deployment／Service</li>
             <li>Backend Deployment／Service</li>
-            <li>依選擇加入 Ingress 或 LoadBalancer</li>
+            <li>依選擇加入 NodePort、Ingress 或 LoadBalancer</li>
           </ul>
           <p class="card-note">「單副本」代表 replica 為 1，不代表指定到單一 Kubernetes Node。</p>
           <a class="text-link" href="../generator/?template=frontend-backend">使用這類問卷開始 <span aria-hidden="true">→</span></a>
@@ -71,6 +74,7 @@
             <li>Namespace、StatefulSet、Service</li>
             <li><code>volumeClaimTemplates</code> 與儲存設定</li>
             <li>既有 Secret 的名稱與 Key 參照</li>
+            <li>選配 PostgreSQL Client Service NodePort</li>
           </ul>
           <p class="card-note warning-text">此範本不是 HA，不包含自動備份、故障切換或資料庫 Operator。</p>
           <a class="text-link" href="../generator/?template=postgresql">使用這類問卷開始 <span aria-hidden="true">→</span></a>
@@ -79,7 +83,7 @@
         <article class="card template-card" data-template-id="frontend-only">
           <p class="card-kicker">03 · Static or SPA</p>
           <h3>純前端</h3>
-          <p>為 Nginx、靜態網站或 Single-page application 建立 Deployment 與 Service，並選擇 port-forward、Ingress 或 LoadBalancer。</p>
+          <p>為 Nginx、靜態網站或 Single-page application 建立 Deployment 與 Service，並選擇 port-forward、NodePort、Ingress 或 LoadBalancer。</p>
           <h4>適合情境</h4>
           <ul>
             <li>靜態網站與前端 build image</li>
@@ -110,7 +114,7 @@
           <ul>
             <li>兩組應用 Deployment／Service</li>
             <li>PostgreSQL StatefulSet、Service 與持久化儲存</li>
-            <li>選配 Ingress、PDB 或 HPA</li>
+            <li>選配 NodePort、Ingress、PDB 或 HPA</li>
           </ul>
           <p class="card-note warning-text">內建資料庫仍是單副本；Production 使用前必須另行規劃備份、還原與可用性。</p>
           <a class="text-link" href="../generator/?template=fullstack-postgresql">使用這類問卷開始 <span aria-hidden="true">→</span></a>
@@ -136,6 +140,8 @@
       <h2 id="shared-rules-title">所有範本共用的生成原則</h2>
       <ul class="check-list">
         <li>Service selector 與 Pod labels 必須一致，<code>targetPort</code> 必須對應 Container Port。</li>
+        <li>NodePort 不會產生 Ingress；留空由叢集分配，固定值必須在預設 <code>30000–32767</code> 範圍並自行避免衝突。</li>
+        <li>可用既有 Node label 產生每個工作負載的 <code>nodeSelector</code>；產生器不會替叢集標記或管理 Node。</li>
         <li>Production 不接受 <code>latest</code> 或缺少版本的 image。</li>
         <li>Production 只引用既有 Secret，不要求或保存密碼內容。</li>
         <li>輸出不得留下 <code>CHANGE_ME</code>、<code>REPLACE_ME</code> 或未替換的指令佔位符。</li>
@@ -156,7 +162,7 @@
         <a href="../privacy/">隱私權</a>
         <a href="../privacy/#cookies">Cookie 設定</a>
         <a href="../licenses/">第三方授權</a>
-        <a href="#" data-config-link="github" aria-label="GitHub 專案連結（尚未設定）">GitHub</a>
+        <a href="#" data-config-link="github" aria-label="GitHub 專案（另開新分頁）">GitHub</a>
         <a href="#" data-config-link="support" aria-label="支持專案連結（尚未設定）">支持專案</a>
       </nav>
       <p class="footer-meta">純前端工具，不會連線或修改你的 Kubernetes Cluster。</p>

@@ -26,13 +26,15 @@ The existing architecture designer remains available as an advanced visualizatio
 1. Template, project name, namespace, environment
 2. Application images, ports, replicas, resources, probes, ConfigMap values, command and args
 3. PostgreSQL mode, storage, and existing Secret references
-4. ClusterIP, Ingress, or LoadBalancer exposure; optional PDB and HPA
+4. ClusterIP, NodePort, Ingress, or LoadBalancer exposure; optional PDB and HPA
 5. Review, validation, YAML preview, deployment guide, and downloads
 
 ## Generation rules
 
 - Create JavaScript resource objects before deterministic YAML serialization.
 - Keep selectors, Pod labels, Service ports, and Ingress references consistent.
+- For NodePort, omit Ingress, expose each enabled application Service independently (or the client PostgreSQL Service in the database-only template), and accept either automatic allocation or a fixed value in the default `30000–32767` range.
+- Allow deterministic per-workload `nodeSelector` maps based on existing Node labels; never emit `nodeName`.
 - Reject `latest` and unversioned images in Production.
 - Accept Secret names and keys only; never accept or persist secret values.
 - Use StatefulSet and `volumeClaimTemplates` for built-in PostgreSQL.
@@ -50,14 +52,16 @@ Passing local rules must not be described as cluster validation. The user must r
 
 - Never connect to a cluster or execute `kubectl`.
 - Never request kubeconfig, cluster tokens, passwords, or private keys.
-- Do not manage Node, Node Pool, taints, tolerations, cluster installation, upgrades, controllers, CRDs, Operators, StorageClasses, or Metrics Server.
+- Do not create, label, provision, or manage Node, Node Pool, taints, tolerations, cluster installation, upgrades, controllers, CRDs, Operators, StorageClasses, or Metrics Server. Generating a user-supplied `nodeSelector` constraint is allowed.
 - Browser storage may contain non-sensitive draft preferences only.
 
 ## Hosting and compatibility
 
 - Plain HTML, CSS, and JavaScript; no runtime server, framework, package manager, or CDN.
 - Relative URLs compatible with `username.github.io/repository/`.
-- Current Chrome and Edge at desktop widths down to 1024px.
+- Keep a searchable landing page with a compact template/project/environment quick start; keep the full five-step questionnaire in `generator/`.
+- Current Chrome and Edge from 320px mobile layouts through desktop widths; controls and output must not be clipped by the viewport.
+- Follow the browser light/dark preference initially, provide an accessible manual theme toggle, and persist only the non-sensitive theme preference.
 - Core features remain functional when ads, clipboard, or browser storage are unavailable.
 
 ## MVP acceptance
@@ -67,5 +71,5 @@ Passing local rules must not be described as cluster validation. The user must r
 - Output is deterministic and has no unresolved placeholders or secret values.
 - Deployment guides contain dry-run, apply, verification, logs, rollback, and removal sections.
 - Architecture Designer remains usable from `designer/`.
+- Homepage quick-start values reach the Generator without exposing sensitive data, and light/dark mode remains readable on every page.
 - Privacy and third-party licensing pages are linked from the site footer.
-

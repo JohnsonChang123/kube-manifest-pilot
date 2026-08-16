@@ -7,17 +7,21 @@
   <meta name="description" content="透過引導式問卷產生 Kubernetes YAML Manifest、驗證提醒與逐步部署教學，不需連線 Kubernetes 叢集。">
   <meta name="keywords" content="Kubernetes YAML generator, Kubernetes manifest generator, K8s deployment guide, Kubernetes 設定檔產生器">
   <meta name="theme-color" content="#326ce5">
+  <link rel="canonical" href="https://johnsonchang123.github.io/kube-manifest-pilot/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="KubeManifestPilot">
   <meta property="og:title" content="KubeManifestPilot — Kubernetes YAML Manifest Generator">
   <meta property="og:description" content="問卷式產生 Kubernetes YAML、驗證提醒與逐步部署教學。">
-  <meta property="og:image" content="./assets/images/kube-manifest-pilot-social-preview.jpg">
+  <meta property="og:url" content="https://johnsonchang123.github.io/kube-manifest-pilot/">
+  <meta property="og:image" content="https://johnsonchang123.github.io/kube-manifest-pilot/assets/images/kube-manifest-pilot-social-preview.jpg">
+  <script src="./assets/js/theme-init.js"></script>
   <link rel="stylesheet" href="./assets/css/site.css">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "KubeManifestPilot",
+    "url": "https://johnsonchang123.github.io/kube-manifest-pilot/",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Web",
     "description": "A browser-based Kubernetes YAML manifest generator with validation warnings and step-by-step deployment guides.",
@@ -41,6 +45,7 @@
         <a href="./designer/">架構設計工具</a>
       </div>
       <div class="nav-actions">
+        <button class="button small theme-toggle" type="button" data-theme-toggle aria-label="切換為深色模式" aria-pressed="false"><span data-theme-icon aria-hidden="true">☾</span><span data-theme-label>深色</span></button>
         <a class="button small secondary" href="#" data-config-link="support">支持專案</a>
         <a class="button small primary" href="./generator/">開始產生</a>
       </div>
@@ -91,6 +96,49 @@
       </div>
     </section>
 
+    <section class="section compact white" aria-labelledby="quickStartTitle">
+      <div class="page-shell">
+        <div class="card">
+          <div class="section-head">
+            <p class="eyebrow">Questionnaire first</p>
+            <h2 id="quickStartTitle">快速開始</h2>
+            <p>先選架構、專案名稱與環境，再到完整五步問卷補齊容器、資料庫與對外方式。</p>
+          </div>
+          <form action="./generator/" method="get" aria-label="快速開始 Kubernetes 問卷">
+            <div class="form-grid three">
+              <div class="field">
+                <label for="quickTemplate">部署範本</label>
+                <select id="quickTemplate" name="template">
+                  <option value="frontend-backend">前後端各單副本</option>
+                  <option value="postgresql">PostgreSQL 單副本</option>
+                  <option value="frontend">純前端</option>
+                  <option value="backend">純後端 API</option>
+                  <option value="fullstack-postgresql">前後端＋PostgreSQL</option>
+                  <option value="backend-external-postgresql">後端＋外部 PostgreSQL</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="quickProject">應用名稱</label>
+                <input id="quickProject" name="project" value="my-app" pattern="[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?" maxlength="63" autocomplete="off" required>
+                <p class="hint">使用小寫英數字與連字號。</p>
+              </div>
+              <div class="field">
+                <label for="quickEnvironment">環境</label>
+                <select id="quickEnvironment" name="environment">
+                  <option value="DEV">DEV</option>
+                  <option value="PRODUCTION">PRODUCTION</option>
+                </select>
+              </div>
+            </div>
+            <div class="hero-actions">
+              <button class="button primary" type="submit">帶入完整問卷</button>
+              <a class="button" href="./generator/">從預設值開始</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
     <section class="section white" aria-labelledby="featuresTitle">
       <div class="page-shell">
         <div class="section-head center">
@@ -100,7 +148,7 @@
         </div>
         <div class="grid">
           <article class="card feature"><span class="feature-icon">01</span><h3>條件式問卷</h3><p>只顯示當前架構需要的設定，支援前端、後端與 PostgreSQL 等常用起始範本。</p></article>
-          <article class="card feature"><span class="feature-icon">02</span><h3>一致性驗證</h3><p>檢查名稱、映像版本、Port、Selector、Probe、Secret 與 Ingress 之間的關聯。</p></article>
+          <article class="card feature"><span class="feature-icon">02</span><h3>一致性驗證</h3><p>檢查名稱、映像版本、Port、Selector、Probe、Secret、NodePort 與 Ingress 之間的關聯。</p></article>
           <article class="card feature"><span class="feature-icon">03</span><h3>動態部署教學</h3><p>使用實際 Namespace 與 Resource 名稱，生成 dry-run、驗證、Log、Rollback 與移除指令。</p></article>
         </div>
       </div>
@@ -120,7 +168,7 @@
 
     <section class="section white" aria-labelledby="templatesTitle">
       <div class="page-shell">
-        <div class="section-head"><p class="eyebrow">起始範本</p><h2 id="templatesTitle">從最小可理解架構開始</h2><p>「單副本」代表 Workload Replica 為 1，不會將 Pod 綁定到特定 Kubernetes Node。</p></div>
+        <div class="section-head"><p class="eyebrow">起始範本</p><h2 id="templatesTitle">從最小可理解架構開始</h2><p>「單副本」代表 Workload Replica 為 1；預設不綁定 Node，也可依叢集既有 label 選配 <code>nodeSelector</code>。</p></div>
         <div class="grid">
           <article class="card"><span class="template-tag">推薦起點</span><h3>前後端各單副本</h3><p>Frontend、Backend 各一組 Deployment 與 Service，適合學習應用服務關係。</p></article>
           <article class="card"><span class="template-tag">資料庫</span><h3>PostgreSQL 單副本</h3><p>StatefulSet、Headless／Client Service 與持久儲存；明示不具 HA 與備份。</p></article>

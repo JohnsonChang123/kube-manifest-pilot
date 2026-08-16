@@ -4,8 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Kubernetes YAML 產生器｜KubeManifestPilot</title>
-  <meta name="description" content="以五步問卷產生 Kubernetes Deployment、Service、StatefulSet、Ingress YAML 與對應部署教學。">
+  <meta name="description" content="以五步問卷產生 Kubernetes Deployment、Service、StatefulSet、Ingress／NodePort YAML 與對應部署教學。">
   <meta name="theme-color" content="#326ce5">
+  <link rel="canonical" href="https://johnsonchang123.github.io/kube-manifest-pilot/generator/">
+  <script src="../assets/js/theme-init.js"></script>
   <link rel="stylesheet" href="../assets/css/site.css">
 </head>
 <body class="generator-page">
@@ -21,6 +23,7 @@
         <a href="../designer/">架構設計工具</a>
       </div>
       <div class="nav-actions">
+        <button class="button small theme-toggle" type="button" data-theme-toggle aria-label="切換為深色模式" aria-pressed="false"><span data-theme-icon aria-hidden="true">☾</span><span data-theme-label>深色</span></button>
         <button class="button small" type="button" id="resetDraft">重設問卷</button>
         <a class="button small secondary" href="#" data-config-link="support">支持專案</a>
       </div>
@@ -94,10 +97,11 @@
                     <div class="field full"><label class="check-row"><input id="frontendStartup" name="frontendStartup" type="checkbox">容器啟動較慢，產生 Startup Probe</label></div>
                     <div class="field"><label for="frontendStartupType">Startup 類型</label><select id="frontendStartupType" name="frontendStartupType"><option value="tcp">TCP</option><option value="http">HTTP</option></select></div>
                     <div class="field"><label for="frontendStartupPath">Startup Path</label><input id="frontendStartupPath" name="frontendStartupPath" value="/"><span class="field-error" data-error-for="frontendStartupPath"></span></div>
-                    <div class="field full"><label for="frontendConfig">ConfigMap 環境變數</label><textarea id="frontendConfig" name="frontendConfig" placeholder="API_BASE_URL=/api&#10;FEATURE_X=true"></textarea><p class="hint">每行 KEY=value；不要放密碼或 Token。</p></div>
+                    <div class="field full"><label for="frontendConfig">ConfigMap 環境變數</label><textarea id="frontendConfig" name="frontendConfig" placeholder="API_BASE_URL=/api&#10;FEATURE_X=true"></textarea><p class="hint">每行 KEY=value；不要放密碼或 Token。</p><span class="field-error" data-error-for="frontendConfig"></span></div>
                     <div class="field full"><label for="frontendSecretEnv">既有 Secret 環境變數參照</label><textarea id="frontendSecretEnv" name="frontendSecretEnv" placeholder="SESSION_KEY=frontend-secrets:session-key"></textarea><p class="hint">每行 ENV_NAME=secret-name:key；只保存參照，不輸入 Secret 值。</p><span class="field-error" data-error-for="frontendSecretEnv"></span></div>
-                    <div class="field full"><label for="frontendCommand">Command（每行一個參數）</label><textarea id="frontendCommand" name="frontendCommand" placeholder="選填，留空沿用 image 預設"></textarea></div>
-                    <div class="field full"><label for="frontendArgs">Args（每行一個參數）</label><textarea id="frontendArgs" name="frontendArgs" placeholder="選填，留空沿用 image 預設"></textarea></div>
+                    <div class="field full"><label for="frontendNodeSelector">Node Selector（選填）</label><textarea id="frontendNodeSelector" name="frontendNodeSelector" placeholder="workload.example.com/tier=frontend"></textarea><p class="hint">每行 key=value。若要固定至單一節點，先確認該 Node 的 label，再使用例如 kubernetes.io/hostname=worker-1；沒有符合的 Node 時 Pod 會 Pending。</p><span class="field-error" data-error-for="frontendNodeSelector"></span></div>
+                    <div class="field full"><label for="frontendCommand">Command（每行一個參數）</label><textarea id="frontendCommand" name="frontendCommand" placeholder="選填，留空沿用 image 預設"></textarea><span class="field-error" data-error-for="frontendCommand"></span></div>
+                    <div class="field full"><label for="frontendArgs">Args（每行一個參數）</label><textarea id="frontendArgs" name="frontendArgs" placeholder="選填，留空沿用 image 預設"></textarea><span class="field-error" data-error-for="frontendArgs"></span></div>
                   </div>
                 </details>
               </div>
@@ -125,10 +129,11 @@
                     <div class="field full"><label class="check-row"><input id="backendStartup" name="backendStartup" type="checkbox">容器啟動較慢，產生 Startup Probe</label></div>
                     <div class="field"><label for="backendStartupType">Startup 類型</label><select id="backendStartupType" name="backendStartupType"><option value="tcp">TCP</option><option value="http">HTTP</option></select></div>
                     <div class="field"><label for="backendStartupPath">Startup Path</label><input id="backendStartupPath" name="backendStartupPath" value="/healthz"><span class="field-error" data-error-for="backendStartupPath"></span></div>
-                    <div class="field full"><label for="backendConfig">ConfigMap 環境變數</label><textarea id="backendConfig" name="backendConfig" placeholder="LOG_LEVEL=info"></textarea><p class="hint">每行 KEY=value；資料庫 Secret 由下一步設定。</p></div>
+                    <div class="field full"><label for="backendConfig">ConfigMap 環境變數</label><textarea id="backendConfig" name="backendConfig" placeholder="LOG_LEVEL=info"></textarea><p class="hint">每行 KEY=value；資料庫 Secret 由下一步設定。</p><span class="field-error" data-error-for="backendConfig"></span></div>
                     <div class="field full"><label for="backendSecretEnv">既有 Secret 環境變數參照</label><textarea id="backendSecretEnv" name="backendSecretEnv" placeholder="API_TOKEN=backend-secrets:api-token"></textarea><p class="hint">每行 ENV_NAME=secret-name:key；只保存參照，不輸入 Secret 值。</p><span class="field-error" data-error-for="backendSecretEnv"></span></div>
-                    <div class="field full"><label for="backendCommand">Command（每行一個參數）</label><textarea id="backendCommand" name="backendCommand" placeholder="選填，留空沿用 image 預設"></textarea></div>
-                    <div class="field full"><label for="backendArgs">Args（每行一個參數）</label><textarea id="backendArgs" name="backendArgs">-text=Hello from backend</textarea></div>
+                    <div class="field full"><label for="backendNodeSelector">Node Selector（選填）</label><textarea id="backendNodeSelector" name="backendNodeSelector" placeholder="workload.example.com/tier=backend"></textarea><p class="hint">每行 key=value。這只限制 Backend Pod 的排程位置，不會限制 NodePort 只能從該 Node 存取。</p><span class="field-error" data-error-for="backendNodeSelector"></span></div>
+                    <div class="field full"><label for="backendCommand">Command（每行一個參數）</label><textarea id="backendCommand" name="backendCommand" placeholder="選填，留空沿用 image 預設"></textarea><span class="field-error" data-error-for="backendCommand"></span></div>
+                    <div class="field full"><label for="backendArgs">Args（每行一個參數）</label><textarea id="backendArgs" name="backendArgs">-text=Hello from backend</textarea><span class="field-error" data-error-for="backendArgs"></span></div>
                   </div>
                 </details>
               </div>
@@ -157,6 +162,7 @@
                   <div class="field"><label for="databasePasswordKey">Password Key</label><input id="databasePasswordKey" name="databasePasswordKey" value="password"></div>
                   <div class="field"><label for="databaseUserKey">User Key</label><input id="databaseUserKey" name="databaseUserKey" value="username"><p class="hint">PRODUCTION 從既有 Secret 讀取，不輸出 User 明文。</p></div>
                   <div class="field"><label for="databaseNameKey">Database Key</label><input id="databaseNameKey" name="databaseNameKey" value="database"><p class="hint">PRODUCTION 從既有 Secret 讀取，不輸出 Database 明文。</p></div>
+                  <div class="field full"><label for="databaseNodeSelector">PostgreSQL Node Selector（選填）</label><textarea id="databaseNodeSelector" name="databaseNodeSelector" placeholder="storage.example.com/tier=database"></textarea><p class="hint">每行 key=value。固定 StatefulSet 前請確認目標 Node、StorageClass 與 PVC topology 相容，否則 Pod 或 PVC 可能 Pending。</p><span class="field-error" data-error-for="databaseNodeSelector"></span></div>
                 </div>
               </div>
 
@@ -178,12 +184,18 @@
           </div>
 
           <div class="wizard-step" data-step="3" hidden>
-            <header class="panel-head"><h2>設定對外方式與可靠性</h2><p>Backend 預設保持 ClusterIP。Ingress 與 LoadBalancer 只引用叢集已具備的能力。</p></header>
+            <header class="panel-head"><h2>設定對外方式與可靠性</h2><p>可保持 ClusterIP，或選擇 NodePort、Ingress、LoadBalancer；產生器不會修改防火牆或安裝 Controller。</p></header>
             <div class="panel-body">
               <div class="form-section">
                 <h3>服務入口</h3>
                 <div class="form-grid">
-                  <div class="field full"><label for="exposureMode">對外方式</label><select id="exposureMode" name="exposureMode"><option value="clusterip">僅 ClusterIP，由 port-forward 驗證</option><option value="ingress">Ingress（需既有 Controller／Class）</option><option value="loadbalancer">LoadBalancer（需雲端或 LB 整合）</option></select></div>
+                  <div class="field full"><label for="exposureMode">對外方式</label><select id="exposureMode" name="exposureMode"><option value="clusterip">僅 ClusterIP，由 port-forward 驗證</option><option value="nodeport">NodePort（不建立 Ingress）</option><option value="ingress">Ingress（需既有 Controller／Class）</option><option value="loadbalancer">LoadBalancer（需雲端或 LB 整合）</option></select></div>
+                </div>
+                <div class="form-grid" data-nodeport-fields hidden style="margin-top:16px">
+                  <div class="field" data-nodeport-target="frontend"><label for="frontendNodePort">Frontend NodePort（選填）</label><input id="frontendNodePort" name="frontendNodePort" type="number" min="30000" max="32767" placeholder="留空由叢集分配"><span class="field-error" data-error-for="frontendNodePort"></span></div>
+                  <div class="field" data-nodeport-target="backend"><label for="backendNodePort">Backend NodePort（選填）</label><input id="backendNodePort" name="backendNodePort" type="number" min="30000" max="32767" placeholder="留空由叢集分配"><span class="field-error" data-error-for="backendNodePort"></span></div>
+                  <div class="field" data-nodeport-target="database"><label for="databaseNodePort">PostgreSQL NodePort（選填）</label><input id="databaseNodePort" name="databaseNodePort" type="number" min="30000" max="32767" placeholder="留空由叢集分配"><span class="field-error" data-error-for="databaseNodePort"></span></div>
+                  <div class="notice warning field full">NodePort 通常會在每個 Node 開放同一個 Port。各 Service 的固定 Port 必須不同，並請限制防火牆、安全群組與來源網段；PostgreSQL 不建議直接暴露到公網。</div>
                 </div>
                 <div class="form-grid" data-ingress-fields hidden style="margin-top:16px">
                   <div class="field"><label for="ingressClassName">IngressClass</label><input id="ingressClassName" name="ingressClassName" placeholder="例如 nginx"></div>
