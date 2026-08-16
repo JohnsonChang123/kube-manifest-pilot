@@ -1,3 +1,4 @@
 User-agent: *
 Allow: /
 
+Sitemap: https://johnsonchang123.github.io/kube-manifest-pilot/sitemap.xml

@@ -20,6 +20,7 @@
       document.head.appendChild(base);
     })();
   </script>
+  <script src="./assets/js/theme-init.js"></script>
   <link rel="stylesheet" href="./assets/css/site.css">
 </head>
 <body class="site-page">
@@ -37,6 +38,7 @@
         <a href="./templates/">範本</a>
         <a href="./designer/">架構設計工具</a>
       </nav>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="切換為深色模式" aria-pressed="false"><span data-theme-icon aria-hidden="true">☾</span><span data-theme-label>深色</span></button>
     </div>
   </header>
 
@@ -65,7 +67,7 @@
         <a href="./privacy/">隱私權</a>
         <a href="./privacy/#cookies">Cookie 設定</a>
         <a href="./licenses/">第三方授權</a>
-        <a href="#" data-config-link="github" aria-label="GitHub 專案連結（尚未設定）">GitHub</a>
+        <a href="#" data-config-link="github" aria-label="GitHub 專案（另開新分頁）">GitHub</a>
         <a href="#" data-config-link="support" aria-label="支持專案連結（尚未設定）">支持專案</a>
       </nav>
       <p class="footer-meta">純前端工具，不會連線或修改你的 Kubernetes Cluster。</p>

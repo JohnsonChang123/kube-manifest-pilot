@@ -594,6 +594,348 @@ function testPlaceholderValidationMatchesGeneration() {
   });
 }
 
+function testNodePortApplicationServices() {
+  var spec = {
+    template: "frontend-backend",
+    project: {
+      name: "nodeport-app",
+      namespace: "nodeport-app",
+      environment: "DEV"
+    },
+    frontend: {
+      enabled: true,
+      name: "web",
+      image: "example/web:1.0.0"
+    },
+    backend: {
+      enabled: true,
+      name: "api",
+      image: "example/api:1.0.0"
+    },
+    database: {
+      mode: "none"
+    },
+    exposure: {
+      mode: "nodeport",
+      nodePorts: {
+        frontend: 30080,
+        backend: 30081,
+        database: 0
+      },
+      hostname: "stale.example.com",
+      tls: true,
+      tlsSecretName: "stale-tls"
+    }
+  };
+  var validation = engine.validateSpec(spec);
+  var normalized = validation.spec;
+  var resources = engine.buildResources(spec);
+  var frontendService = resource(resources, "Service", "web");
+  var backendService = resource(resources, "Service", "api");
+  var tutorial = engine.generateTutorial(spec);
+  var questionnaire = engine.generateQuestionnaireJson(spec);
+
+  assert.strictEqual(validation.valid, true, JSON.stringify(validation.errors));
+  assert.strictEqual(frontendService.spec.type, "NodePort");
+  assert.strictEqual(frontendService.spec.ports[0].nodePort, 30080);
+  assert.strictEqual(backendService.spec.type, "NodePort");
+  assert.strictEqual(backendService.spec.ports[0].nodePort, 30081);
+  assert.strictEqual(resource(resources, "Ingress", "nodeport-app-ingress"), undefined);
+  assert.strictEqual(normalized.exposure.tls, false);
+  assert.strictEqual(normalized.exposure.tlsSecretName, "");
+  assert(tutorial.indexOf("service web --output") >= 0);
+  assert(tutorial.indexOf("service api --output") >= 0);
+  assert(tutorial.indexOf("30080") >= 0);
+  assert(tutorial.indexOf("30081") >= 0);
+  assert(tutorial.indexOf("等待 LoadBalancer") < 0);
+  assert(tutorial.indexOf("stale-tls") < 0);
+  assert(questionnaire.indexOf("stale-tls") < 0);
+  assert(!/(?:CHANGE[_-]?ME|REPLACE[_-]?ME|<namespace>|<service>)/i.test(tutorial));
+}
+
+function testNodePortPostgresqlOnlyAndFullstackIsolation() {
+  var postgresOnly = {
+    template: "postgresql",
+    project: {
+      name: "nodeport-db",
+      namespace: "nodeport-db",
+      environment: "PRODUCTION"
+    },
+    database: {
+      mode: "internal",
+      name: "postgresql",
+      image: "postgres:16.4-alpine",
+      secretName: "postgresql-credentials",
+      passwordKey: "POSTGRES_PASSWORD",
+      userKey: "POSTGRES_USER",
+      databaseKey: "POSTGRES_DB"
+    },
+    exposure: {
+      mode: "nodeport",
+      nodePorts: {
+        frontend: 0,
+        backend: 0,
+        database: 30432
+      }
+    }
+  };
+  var resources = engine.buildResources(postgresOnly);
+  var clientService = resource(resources, "Service", "postgresql");
+  var headlessService = resource(resources, "Service", "postgresql-headless");
+  var tutorial = engine.generateTutorial(postgresOnly);
+  var fullstack = JSON.parse(JSON.stringify(postgresOnly));
+  var fullstackResources;
+
+  assert.strictEqual(clientService.spec.type, "NodePort");
+  assert.strictEqual(clientService.spec.ports[0].nodePort, 30432);
+  assert.strictEqual(headlessService.spec.clusterIP, "None");
+  assert.strictEqual(headlessService.spec.type, undefined);
+  assert.strictEqual(headlessService.spec.ports[0].nodePort, undefined);
+  assert.strictEqual(resource(resources, "Ingress", "nodeport-db-ingress"), undefined);
+  assert(tutorial.indexOf("PostgreSQL 主 Service") >= 0);
+  assert(tutorial.indexOf("service postgresql --output") >= 0);
+  assert(tutorial.indexOf("30432") >= 0);
+  assert(tutorial.indexOf("切勿直接暴露到公網") >= 0);
+
+  fullstack.template = "fullstack-postgresql";
+  fullstack.frontend = {
+    enabled: true,
+    name: "web",
+    image: "example/web:1.0.0"
+  };
+  fullstack.backend = {
+    enabled: true,
+    name: "api",
+    image: "example/api:1.0.0"
+  };
+  fullstack.exposure.nodePorts.frontend = 30080;
+  fullstack.exposure.nodePorts.backend = 30081;
+  fullstackResources = engine.buildResources(fullstack);
+  assert.strictEqual(resource(fullstackResources, "Service", "postgresql").spec.type, "ClusterIP");
+  assert.strictEqual(resource(fullstackResources, "Service", "postgresql").spec.ports[0].nodePort, undefined);
+}
+
+function testNodePortAutoLegacyAndValidation() {
+  var automatic = {
+    template: "frontend",
+    project: {
+      name: "auto-nodeport",
+      namespace: "auto-nodeport",
+      environment: "DEV"
+    },
+    frontend: {
+      enabled: true,
+      name: "web",
+      image: "example/web:1.0.0"
+    },
+    exposure: {
+      mode: "nodeport",
+      nodePorts: {
+        frontend: 0,
+        backend: 0,
+        database: 0
+      }
+    }
+  };
+  var automaticService = resource(engine.buildResources(automatic), "Service", "web");
+  var legacy = {
+    template: "frontend-backend",
+    project: {
+      name: "legacy-nodeport",
+      namespace: "legacy-nodeport",
+      environment: "DEV"
+    },
+    exposure: {
+      mode: "nodeport",
+      nodePort: 30090
+    }
+  };
+  var normalizedLegacy = engine.normalizeSpec(legacy);
+  var legacyResources = engine.buildResources(legacy);
+  var invalidRange = JSON.parse(JSON.stringify(automatic));
+  var invalidHigh = JSON.parse(JSON.stringify(automatic));
+  var duplicate = JSON.parse(JSON.stringify(legacy));
+
+  assert.strictEqual(automaticService.spec.type, "NodePort");
+  assert.strictEqual(Object.prototype.hasOwnProperty.call(automaticService.spec.ports[0], "nodePort"), false);
+  assert.strictEqual(normalizedLegacy.exposure.nodePorts.frontend, 30090);
+  assert.strictEqual(normalizedLegacy.exposure.nodePorts.backend, 0);
+  assert.strictEqual(resource(legacyResources, "Service", normalizedLegacy.frontend.name).spec.ports[0].nodePort, 30090);
+  assert.strictEqual(resource(legacyResources, "Service", normalizedLegacy.backend.name).spec.type, "NodePort");
+  assert.strictEqual(resource(legacyResources, "Service", normalizedLegacy.backend.name).spec.ports[0].nodePort, undefined);
+  assert.deepStrictEqual(engine.normalizeSpec(normalizedLegacy), normalizedLegacy);
+
+  invalidRange.exposure.nodePorts.frontend = 29999;
+  invalidHigh.exposure.nodePorts.frontend = 32768;
+  duplicate.exposure.nodePorts = {
+    frontend: 30100,
+    backend: 30100,
+    database: 0
+  };
+  assert(engine.validateSpec(invalidRange).errors.some(function (entry) {
+    return entry.code === "INVALID_NODE_PORT" && entry.path === "exposure.nodePorts.frontend";
+  }));
+  assert(engine.validateSpec(invalidHigh).errors.some(function (entry) {
+    return entry.code === "INVALID_NODE_PORT";
+  }));
+  assert(engine.validateSpec(duplicate).errors.some(function (entry) {
+    return entry.code === "DUPLICATE_NODE_PORT";
+  }));
+}
+
+function testNodeSelectorOutputValidationAndDeterminism() {
+  var spec = {
+    template: "fullstack-postgresql",
+    project: {
+      name: "selector-demo",
+      namespace: "selector-demo",
+      environment: "DEV"
+    },
+    frontend: {
+      enabled: true,
+      name: "web",
+      image: "example/web:1.0.0",
+      nodeSelector: {
+        "node-role.kubernetes.io/worker": "",
+        "kubernetes.io/os": "linux"
+      }
+    },
+    backend: {
+      enabled: true,
+      name: "api",
+      image: "example/api:1.0.0",
+      nodeSelector: {
+        "topology.kubernetes.io/zone": "zone-a"
+      }
+    },
+    database: {
+      mode: "internal",
+      name: "postgresql",
+      image: "postgres:16-alpine",
+      secretName: "postgresql-credentials",
+      passwordKey: "POSTGRES_PASSWORD",
+      nodeSelector: {
+        "storage.example.com/tier": "fast"
+      }
+    },
+    exposure: {
+      mode: "nodeport",
+      nodePorts: {
+        frontend: 30080,
+        backend: 30081,
+        database: 0
+      }
+    }
+  };
+  var validation = engine.validateSpec(spec);
+  var resources = engine.buildResources(spec);
+  var webDeployment = resource(resources, "Deployment", "web");
+  var apiDeployment = resource(resources, "Deployment", "api");
+  var statefulSet = resource(resources, "StatefulSet", "postgresql");
+  var normalized = engine.normalizeSpec(spec);
+  var reordered = JSON.parse(JSON.stringify(spec));
+  var tutorial = engine.generateTutorial(spec);
+  var questionnaire = JSON.parse(engine.generateQuestionnaireJson(spec));
+  var invalidKey = JSON.parse(JSON.stringify(spec));
+  var invalidValue = JSON.parse(JSON.stringify(spec));
+
+  assert.strictEqual(validation.valid, true, JSON.stringify(validation.errors));
+  assert.deepStrictEqual(webDeployment.spec.template.spec.nodeSelector, {
+    "kubernetes.io/os": "linux",
+    "node-role.kubernetes.io/worker": ""
+  });
+  assert.deepStrictEqual(apiDeployment.spec.template.spec.nodeSelector, {
+    "topology.kubernetes.io/zone": "zone-a"
+  });
+  assert.deepStrictEqual(statefulSet.spec.template.spec.nodeSelector, {
+    "storage.example.com/tier": "fast"
+  });
+  assert.strictEqual(resource(resources, "Service", "postgresql").spec.type, "ClusterIP");
+  assert(tutorial.indexOf("--selector='kubernetes.io/os=linux,node-role.kubernetes.io/worker='") >= 0);
+  assert(tutorial.indexOf("`node-role.kubernetes.io/worker=`") >= 0);
+  assert(tutorial.indexOf("--selector='storage.example.com/tier=fast'") >= 0);
+  assert(tutorial.indexOf("Pod 會維持 Pending") >= 0);
+  assert.strictEqual(questionnaire.frontend.nodeSelector["node-role.kubernetes.io/worker"], "");
+  assert.deepStrictEqual(engine.normalizeSpec(normalized), normalized);
+
+  reordered.frontend.nodeSelector = {
+    "kubernetes.io/os": "linux",
+    "node-role.kubernetes.io/worker": ""
+  };
+  assert.strictEqual(engine.generateManifest(spec), engine.generateManifest(reordered));
+  assert.strictEqual(
+    engine.generateQuestionnaireJson(spec),
+    engine.generateQuestionnaireJson(reordered)
+  );
+
+  invalidKey.frontend.nodeSelector = {
+    "bad key": "linux"
+  };
+  invalidValue.database.nodeSelector = {
+    "storage.example.com/tier": "-fast"
+  };
+  assert(engine.validateSpec(invalidKey).errors.some(function (entry) {
+    return entry.code === "INVALID_NODE_SELECTOR_KEY";
+  }));
+  assert(engine.validateSpec(invalidValue).errors.some(function (entry) {
+    return entry.code === "INVALID_NODE_SELECTOR_VALUE";
+  }));
+}
+
+function testEveryTemplateSupportsNodePort() {
+  var expectedNodePortServices = {
+    "frontend-backend": 2,
+    postgresql: 1,
+    frontend: 1,
+    backend: 1,
+    "fullstack-postgresql": 2,
+    "backend-external-postgresql": 1
+  };
+
+  Object.keys(expectedNodePortServices).forEach(function (template) {
+    var spec = {
+      template: template,
+      project: {
+        name: "nodeport-" + template,
+        namespace: "nodeport-" + template,
+        environment: "DEV"
+      },
+      exposure: {
+        mode: "nodeport",
+        nodePorts: {
+          frontend: 30080,
+          backend: 30081,
+          database: 30432
+        }
+      }
+    };
+    var validation;
+    var resources;
+    var manifest;
+
+    if (template === "backend-external-postgresql") {
+      spec.database = {
+        mode: "external",
+        host: "postgres.example.internal",
+        secretName: "postgresql-credentials",
+        passwordKey: "password"
+      };
+    }
+
+    validation = engine.validateSpec(spec);
+    assert.strictEqual(validation.valid, true, template + ": " + JSON.stringify(validation.errors));
+    resources = engine.buildResources(spec);
+    assert.strictEqual(resources.filter(function (entry) {
+      return entry.kind === "Service" && entry.spec.type === "NodePort";
+    }).length, expectedNodePortServices[template], template + " must expose the expected Services");
+    assert.strictEqual(resources.some(function (entry) {
+      return entry.kind === "Ingress";
+    }), false, template + " must not emit Ingress in NodePort mode");
+    manifest = engine.generateManifest(spec);
+    assert.strictEqual(manifest, engine.generateManifest(JSON.parse(JSON.stringify(spec))));
+  });
+}
+
 testFrontendBackend();
 testPostgresql();
 testSensitiveDataAndProductionRules();
@@ -603,5 +945,10 @@ testGeneralRemovalPreservesDataBoundaries();
 testYamlStringScalarsAreAlwaysQuoted();
 testEmptyConfigMapValueIsPreserved();
 testPlaceholderValidationMatchesGeneration();
+testNodePortApplicationServices();
+testNodePortPostgresqlOnlyAndFullstackIsolation();
+testNodePortAutoLegacyAndValidation();
+testNodeSelectorOutputValidationAndDeterminism();
+testEveryTemplateSupportsNodePort();
 
 console.log("generator-engine: all tests passed");

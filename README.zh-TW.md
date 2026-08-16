@@ -2,29 +2,35 @@
 
 KubeManifestPilot 是免費、純瀏覽器端的 Kubernetes Manifest 產生器。使用者完成引導式問卷後，可取得內容可重現的 Kubernetes YAML、驗證提醒、問卷 JSON，以及依實際 Resource 名稱生成的部署教學。
 
+首頁提供只包含「範本、專案、環境」的快速開始問卷，完整五步問卷仍保留在產生器頁面，因此首頁兼顧搜尋、分享與初次使用說明。
+
 [English](./README.md) · [開啟問卷](./generator/) · [部署範本](./templates/) · [架構設計工具](./designer/)
 
 ## 主要輸出
 
 - Namespace、Deployment、Service、ConfigMap
 - PostgreSQL StatefulSet、Headless／Client Service 與持久儲存
-- 選配 Ingress、HPA 與 PDB
+- 選配 NodePort／Ingress／LoadBalancer、HPA 與 PDB
+- 依既有 Node label 為各工作負載產生選配的 `nodeSelector`
 - 包含 dry-run、Rollout、驗證、Log、Rollback 與移除說明的 `DEPLOY.md`
 - 已排除敏感欄位的 Questionnaire JSON
+- 支援響應式亮色／暗色模式；初次依瀏覽器偏好顯示，手動選擇會保存在本機
 
 ## 安全界線
 
 - 不接收 kubeconfig、Cluster Token、密碼或私鑰。
 - 不連線或修改 Kubernetes Cluster。
 - 不執行 `kubectl apply`。
-- 不管理 Node、Node Pool、Taint 或 Toleration。
+- 不建立、標記或管理 Node、Node Pool、Taint 或 Toleration；只會依使用者提供的既有 label 產生 `nodeSelector`。
 - 網頁通過僅代表符合產生器靜態規則，仍須在目標叢集執行 server-side dry-run。
 
 Repository 另附可閱讀的[前後端各單副本](./frontend-backend-single-replica.yaml)與 [PostgreSQL 單副本](./postgresql-single-replica.yaml)範例。PostgreSQL 檔案只引用既有 Secret，且不具 HA；請使用問卷依實際名稱與 Namespace 產生配套的 `DEPLOY.md`。
 
+NodePort 採 Kubernetes 預設範圍 `30000–32767`；留空由叢集分配，手動指定時必須確認沒有 Port 衝突並限制防火牆。固定工作負載請使用既有 Node label，例如 `workload.example.com/tier=frontend`；產生器不使用會繞過 Scheduler 的 `nodeName`。
+
 ## 本機與 GitHub Pages
 
-直接使用 Chrome 或 Edge 開啟根目錄 `index.html` 即可，不需安裝 npm、Node.js、後端、框架或 CDN。所有頁面採相對網址；建議 Repository 命名為 `kube-manifest-pilot`，部署網址會是 `https://<username>.github.io/kube-manifest-pilot/`。
+直接使用 Chrome 或 Edge 開啟根目錄 `index.html` 即可，不需安裝 npm、Node.js、後端、框架或 CDN。所有頁面採相對網址；建議 Repository 命名為 `kube-manifest-pilot`，部署網址會是 `https://<username>.github.io/kube-manifest-pilot/`。本 Repository 的公開版本位於 <https://johnsonchang123.github.io/kube-manifest-pilot/>。
 
 GitHub Pages 部署方式：將檔案推送至 Repository，前往 **Settings → Pages**，選擇從分支根目錄發布。
 
