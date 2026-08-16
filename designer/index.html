@@ -1,0 +1,1407 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="可離線使用的 Kubernetes 架構圖設計器">
+  <title>Kubernetes Architecture Designer｜KubeManifestPilot</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --k8s: #326ce5;
+      --k8s-dark: #2456b8;
+      --ink: #172033;
+      --muted: #687386;
+      --line: #dbe2ec;
+      --line-strong: #c8d2df;
+      --surface: #ffffff;
+      --surface-2: #f6f8fb;
+      --surface-3: #edf2f8;
+      --success: #16794c;
+      --warning: #a45b00;
+      --danger: #c33939;
+      --sidebar-left: 248px;
+      --sidebar-right: 292px;
+      --toolbar-height: 92px;
+      --status-height: 28px;
+      --radius: 8px;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body { background: var(--surface-2); color: var(--ink); font-size: 13px; }
+    button, input, textarea, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+      outline: 2px solid rgba(50,108,229,.42); outline-offset: 1px;
+    }
+    .hidden { display: none !important; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+    .app { height: 100%; display: grid; grid-template-rows: var(--toolbar-height) minmax(0, 1fr) var(--status-height); }
+    .topbar { background: var(--surface); border-bottom: 1px solid var(--line); z-index: 20; min-width: 0; }
+    .identity-row, .tool-row { display: flex; align-items: center; min-width: 0; }
+    .identity-row { height: 48px; padding: 0 12px; border-bottom: 1px solid #edf1f6; gap: 10px; }
+    .brand { display: flex; align-items: center; gap: 9px; min-width: 230px; font-weight: 720; letter-spacing: -.01em; }
+    .brand-mark { width: 29px; height: 29px; display: grid; place-items: center; color: white; background: var(--k8s); border-radius: 7px; font-size: 17px; font-weight: 800; }
+    .brand small { display: block; color: var(--muted); font-size: 10px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; }
+    .meta-fields { display: flex; align-items: center; gap: 7px; min-width: 0; flex: 1; }
+    .meta-input { border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 5px 7px; min-width: 0; }
+    .meta-input:hover, .meta-input:focus { background: var(--surface-2); border-color: var(--line); }
+    #metaName { width: min(270px, 25vw); font-weight: 650; }
+    #metaVersion { width: 70px; }
+    #metaOwner { width: min(180px, 18vw); }
+    .env-select { border: 1px solid #bad7c7; background: #edf8f2; color: #17633f; border-radius: 999px; padding: 4px 23px 4px 9px; font-size: 11px; font-weight: 750; letter-spacing: .04em; }
+    .env-select.env-dev { border-color: #b7cef2; background: #eff6ff; color: #275fae; }
+    .env-select.env-staging { border-color: #ead09e; background: #fff9eb; color: #8a5605; }
+    .header-actions { display: flex; gap: 5px; margin-left: auto; }
+
+    .tool-row { height: 44px; padding: 5px 10px; gap: 5px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+    .tool-group { display: flex; align-items: center; gap: 3px; padding-right: 7px; margin-right: 3px; border-right: 1px solid var(--line); white-space: nowrap; }
+    .tool-group:last-child { border-right: 0; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 5px 9px; font-weight: 590; font-size: 12px; }
+    .btn:hover:not(:disabled) { border-color: #aebbd0; background: var(--surface-2); }
+    .btn:disabled { opacity: .42; cursor: default; }
+    .btn.primary { color: white; background: var(--k8s); border-color: var(--k8s); }
+    .btn.primary:hover:not(:disabled) { background: var(--k8s-dark); border-color: var(--k8s-dark); }
+    .btn.danger { color: var(--danger); }
+    .btn.icon { width: 31px; padding: 5px; font-size: 15px; }
+    .btn.active { color: var(--k8s); border-color: #9bbcf5; background: #edf4ff; }
+    .btn.ghost { border-color: transparent; background: transparent; }
+    .zoom-readout { min-width: 47px; text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .search-box { position: relative; width: 190px; }
+    .search-box input { width: 100%; height: 30px; padding: 5px 26px 5px 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+    .search-box::before { content: "⌕"; position: absolute; left: 9px; top: 5px; color: var(--muted); font-size: 15px; }
+    .search-clear { position: absolute; right: 4px; top: 3px; width: 24px; height: 24px; border: 0; background: transparent; color: var(--muted); }
+
+    .workspace { display: grid; grid-template-columns: var(--sidebar-left) minmax(0, 1fr) var(--sidebar-right); min-height: 0; min-width: 0; }
+    .sidebar { background: var(--surface); min-height: 0; display: flex; flex-direction: column; z-index: 10; }
+    .sidebar.left { border-right: 1px solid var(--line); }
+    .sidebar.right { border-left: 1px solid var(--line); }
+    .sidebar-header { min-height: 43px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+    .sidebar-header h2 { font-size: 12px; margin: 0; text-transform: uppercase; letter-spacing: .07em; }
+    .sidebar-body { flex: 1; min-height: 0; overflow: auto; }
+    .sidebar-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 8px; }
+    .sidebar-tabs button { border: 1px solid var(--line); background: var(--surface); border-radius: 5px; padding: 6px; font-size: 11px; font-weight: 650; }
+    .sidebar-tabs button.active { color: var(--k8s); border-color: #a9c4f6; background: #f0f6ff; }
+    .palette-search { margin: 0 8px 7px; width: calc(100% - 16px); height: 30px; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+    .palette-section { border-top: 1px solid #edf1f5; }
+    .palette-section summary { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; cursor: pointer; font-size: 11px; font-weight: 720; color: #445065; text-transform: uppercase; letter-spacing: .045em; user-select: none; }
+    .palette-section summary::-webkit-details-marker { display: none; }
+    .palette-section summary::after { content: "⌄"; color: #8994a6; }
+    .palette-list { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 0 8px 9px; }
+    .palette-item { min-width: 0; min-height: 55px; border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 6px; display: flex; align-items: center; gap: 6px; cursor: grab; user-select: none; }
+    .palette-item:hover { border-color: #90b3ef; background: #f5f9ff; }
+    .palette-item:active { cursor: grabbing; }
+    .palette-icon { flex: none; width: 27px; height: 27px; display: grid; place-items: center; border-radius: 6px; color: white; background: var(--item-color, var(--k8s)); font-size: 12px; font-weight: 800; }
+    .palette-item span:last-child { overflow: hidden; text-overflow: ellipsis; line-height: 1.15; font-size: 10.5px; font-weight: 650; }
+    .palette-empty { padding: 20px; text-align: center; color: var(--muted); }
+
+    .stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #f8fafc; }
+    #canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: default; }
+    #canvas.pan-mode, #canvas.is-panning { cursor: grab; }
+    #canvas.is-panning { cursor: grabbing; }
+    #canvas.connect-mode { cursor: crosshair; }
+    .canvas-drop-hint { position: absolute; inset: 20px; border: 2px dashed #8db3f1; background: rgba(237,244,255,.72); display: grid; place-items: center; color: var(--k8s); font-weight: 700; border-radius: 10px; pointer-events: none; opacity: 0; transition: opacity .12s; }
+    .stage.drag-over .canvas-drop-hint { opacity: 1; }
+    .canvas-badge { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; pointer-events: none; }
+    .badge { background: rgba(255,255,255,.94); border: 1px solid var(--line); border-radius: 5px; padding: 4px 7px; color: var(--muted); font-size: 10.5px; }
+    .badge.env-production { color: #17633f; border-color: #b8dac7; background: rgba(239,249,244,.96); font-weight: 720; }
+    .badge.env-staging { color: #8a5605; border-color: #ead09e; background: rgba(255,249,235,.96); font-weight: 720; }
+    .badge.env-dev { color: #275fae; border-color: #b7cef2; background: rgba(239,246,255,.96); font-weight: 720; }
+    .stage-tools { position: absolute; left: 10px; bottom: 10px; display: flex; flex-direction: column; gap: 4px; }
+    .stage-tools .btn { background: rgba(255,255,255,.96); width: 32px; height: 32px; padding: 0; }
+    .stage-panel-toggle { display: none; position: absolute; right: 10px; top: 10px; z-index: 4; background: rgba(255,255,255,.96); }
+    .minimap-wrap { position: absolute; right: 10px; bottom: 10px; width: 188px; height: 116px; background: rgba(255,255,255,.96); border: 1px solid var(--line-strong); border-radius: 7px; overflow: hidden; }
+    .minimap-title { position: absolute; left: 7px; top: 4px; z-index: 2; color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+    #minimap { width: 100%; height: 100%; cursor: pointer; }
+
+    .inspector-empty { padding: 34px 18px; text-align: center; color: var(--muted); line-height: 1.6; }
+    .empty-icon { width: 44px; height: 44px; margin: 0 auto 10px; display: grid; place-items: center; border: 1px dashed #afbbca; border-radius: 9px; color: #8490a2; font-size: 20px; }
+    .inspector-form { padding: 10px 11px 30px; }
+    .entity-summary { display: flex; align-items: center; gap: 9px; padding: 8px; margin-bottom: 10px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 7px; }
+    .entity-summary .palette-icon { width: 32px; height: 32px; }
+    .entity-summary strong, .entity-summary small { display: block; }
+    .entity-summary small { color: var(--muted); margin-top: 2px; }
+    .form-section { margin: 13px 0 7px; color: #4d5a6f; font-size: 10px; font-weight: 760; text-transform: uppercase; letter-spacing: .07em; }
+    .field { display: grid; grid-template-columns: 92px minmax(0,1fr); align-items: center; gap: 8px; margin-bottom: 7px; }
+    .field.top { align-items: start; }
+    .field label { color: #5f6b7d; font-size: 11px; }
+    .field input, .field select, .field textarea { width: 100%; min-width: 0; border: 1px solid var(--line); background: var(--surface); border-radius: 5px; padding: 6px 7px; }
+    .field textarea { min-height: 57px; resize: vertical; }
+    .field input[type="color"] { height: 31px; padding: 2px; }
+    .inspector-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 13px; }
+
+    .statusbar { border-top: 1px solid var(--line); background: var(--surface); display: flex; align-items: center; gap: 15px; padding: 0 9px; color: var(--muted); font-size: 10.5px; z-index: 20; }
+    #statusMessage { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .status-links { margin-left: auto; display: flex; flex: none; gap: 9px; }
+    .status-links a { color: var(--muted); text-decoration: none; }
+    .status-links a:hover, .status-links a:focus-visible { color: var(--k8s); text-decoration: underline; }
+
+    .modal-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(15,25,43,.34); display: grid; place-items: center; padding: 24px; }
+    .modal { width: min(760px, 96vw); max-height: min(760px, 92vh); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 20px 55px rgba(24,36,58,.2); display: flex; flex-direction: column; overflow: hidden; }
+    .modal.wide { width: min(980px, 96vw); }
+    .modal-head { min-height: 52px; padding: 11px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
+    .modal-head h2 { margin: 0; font-size: 15px; }
+    .modal-head p { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
+    .modal-head .btn { margin-left: auto; }
+    .modal-body { overflow: auto; padding: 14px; }
+    .template-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+    .template-card { text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 12px; min-height: 92px; }
+    .template-card:hover { border-color: #8fb1eb; background: #f7faff; }
+    .template-card strong { display: block; margin-bottom: 5px; }
+    .template-card span { color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+    .tutorial-layout { display: grid; grid-template-columns: 218px minmax(0,1fr); min-height: 430px; }
+    .tutorial-nav { border-right: 1px solid var(--line); padding: 10px; background: var(--surface-2); }
+    .tutorial-nav button { width: 100%; text-align: left; border: 0; border-radius: 6px; background: transparent; padding: 8px 9px; margin-bottom: 3px; color: #4f5b6d; }
+    .tutorial-nav button:hover { background: #eaf0f8; }
+    .tutorial-nav button.active { color: var(--k8s); background: #e8f1ff; font-weight: 700; }
+    .tutorial-content { padding: 20px 22px 28px; overflow: auto; }
+    .tutorial-content h3 { margin: 0 0 6px; font-size: 19px; }
+    .tutorial-content .lead { margin: 0 0 14px; color: var(--muted); line-height: 1.6; }
+    .tutorial-content ol, .tutorial-content ul { padding-left: 20px; line-height: 1.65; }
+    .code-block { position: relative; margin: 10px 0; background: #111827; color: #dbeafe; border-radius: 7px; padding: 12px 44px 12px 13px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .copy-code { position: absolute; top: 6px; right: 6px; color: #dbeafe; border: 1px solid #44516a; background: #263247; border-radius: 4px; padding: 3px 6px; font-family: inherit; font-size: 9px; }
+    .notice { border-left: 3px solid var(--k8s); background: #f0f6ff; padding: 9px 11px; color: #40516b; line-height: 1.5; margin: 12px 0; }
+    .notice.warning { border-left-color: #d8871b; background: #fff8eb; }
+
+    .quick-add { position: fixed; z-index: 130; width: 270px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 12px 35px rgba(22,33,50,.2); overflow: hidden; }
+    .quick-add input { width: 100%; height: 38px; border: 0; border-bottom: 1px solid var(--line); padding: 8px 10px; outline: none; }
+    .quick-list { max-height: 260px; overflow: auto; padding: 5px; }
+    .quick-item { width: 100%; border: 0; background: transparent; border-radius: 5px; padding: 7px; display: flex; align-items: center; gap: 8px; text-align: left; }
+    .quick-item:hover, .quick-item.active { background: #edf4ff; }
+    .quick-item small { color: var(--muted); margin-left: auto; }
+    .context-menu { position: fixed; z-index: 140; width: 190px; max-height: calc(100vh - 10px); overflow: auto; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 7px; padding: 5px; box-shadow: 0 10px 28px rgba(22,33,50,.18); }
+    .context-menu button { width: 100%; border: 0; background: transparent; text-align: left; padding: 7px 9px; border-radius: 4px; }
+    .context-menu button:hover { background: var(--surface-3); }
+    .context-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px; }
+    .context-menu .danger { color: var(--danger); }
+    .toast-region { position: fixed; right: 12px; top: 104px; z-index: 200; display: grid; gap: 7px; pointer-events: none; }
+    .toast { width: min(330px, calc(100vw - 24px)); padding: 10px 12px; background: #1f2937; color: white; border-radius: 7px; box-shadow: 0 8px 25px rgba(20,30,45,.2); animation: toast-in .18s ease-out; }
+    .toast.error { background: #8f2d2d; }
+    @keyframes toast-in { from { transform: translateY(-6px); opacity: 0; } }
+
+    /* SVG canvas */
+    .grid-major { color: #e0e6ef; }
+    .edge-hit { fill: none; stroke: transparent; stroke-width: 13; cursor: pointer; }
+    .edge-path { fill: none; stroke: #61718a; stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
+    .edge-path.dashed { stroke-dasharray: 7 5; }
+    .edge-path.animated { stroke-dasharray: 8 5; animation: edge-flow 1s linear infinite; }
+    @keyframes edge-flow { to { stroke-dashoffset: -26; } }
+    .edge-label-bg { fill: rgba(255,255,255,.94); stroke: #d6deea; stroke-width: 1; }
+    .edge-label { fill: #445167; font-size: 10px; font-weight: 650; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+    .edge.selected .edge-path { stroke: var(--k8s) !important; stroke-width: 2.6; }
+    .group-shape { fill: rgba(238,245,255,.62); stroke: #9bbcf1; stroke-width: 1.5; }
+    .group-header { fill: rgba(224,237,255,.96); }
+    .group-title { fill: #244e99; font-size: 12px; font-weight: 730; }
+    .group-subtitle { fill: #6682ae; font-size: 9px; }
+    .group.selected .group-shape { stroke: var(--k8s); stroke-width: 2.2; }
+    .group.collapsed .group-shape { fill: rgba(238,245,255,.95); }
+    .node { cursor: move; }
+    .node-card { fill: #fff; stroke: #c7d2df; stroke-width: 1.2; }
+    .node:hover .node-card { stroke: #8aa6cc; }
+    .node.selected .node-card { stroke: var(--k8s); stroke-width: 2.1; }
+    .node-icon-bg { fill: var(--node-color, var(--k8s)); }
+    .node-icon-glyph { fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .node-title { fill: #1d293b; font-size: 12px; font-weight: 720; pointer-events: none; }
+    .node-type { fill: #758095; font-size: 8.5px; font-weight: 680; text-transform: uppercase; letter-spacing: .06em; pointer-events: none; }
+    .node-subtitle { fill: #526176; font-size: 9.5px; pointer-events: none; }
+    .node-detail { fill: #718096; font-size: 8px; pointer-events: none; }
+    .node-status { stroke: #fff; stroke-width: 1.5; }
+    .port { fill: #fff; stroke: var(--k8s); stroke-width: 1.6; cursor: crosshair; opacity: 0; }
+    .node:hover .port, .node.selected .port, .connect-mode .port { opacity: 1; }
+    .resize-handle { fill: #fff; stroke: var(--k8s); stroke-width: 1.5; cursor: nwse-resize; }
+    .group .resize-handle { opacity: 0; }
+    .group.selected .resize-handle { opacity: 1; }
+    .selection-box { fill: rgba(50,108,229,.09); stroke: var(--k8s); stroke-width: 1; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
+    .guide { stroke: #d34c89; stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+    .search-dim { opacity: .22; }
+    .search-match .node-card { stroke: #e29a16; stroke-width: 2.3; }
+    .group.search-match .group-shape { stroke: #e29a16; stroke-width: 2.3; }
+
+    @media (max-width: 1200px) {
+      :root { --sidebar-left: 216px; --sidebar-right: 260px; }
+      .brand { min-width: 205px; }
+      .palette-list { grid-template-columns: 1fr; }
+      .minimap-wrap { width: 158px; height: 100px; }
+    }
+    @media (max-width: 1040px) {
+      :root { --sidebar-left: 205px; --sidebar-right: 240px; }
+      .brand { min-width: 145px; }
+      .brand small { display: none; }
+      #metaName { width: 150px; }
+      #metaVersion { width: 55px; }
+      #metaOwner { width: 100px; }
+      .btn .label-optional { display: none; }
+      .stage-panel-toggle { display: inline-flex; }
+      .field { grid-template-columns: 1fr; gap: 3px; }
+      .modal.wide { width: min(940px, calc(100vw - 48px)); }
+      .tutorial-layout { grid-template-columns: 180px minmax(0,1fr); }
+    }
+    .workspace.left-collapsed { grid-template-columns: 0 minmax(0, 1fr) var(--sidebar-right); }
+    .workspace.right-collapsed { grid-template-columns: var(--sidebar-left) minmax(0, 1fr) 0; }
+    .workspace.left-collapsed.right-collapsed { grid-template-columns: 0 minmax(0, 1fr) 0; }
+    .workspace.left-collapsed .sidebar.left, .workspace.right-collapsed .sidebar.right { overflow: hidden; border: 0; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="identity-row">
+        <div class="brand" aria-label="Kubernetes Architecture Designer">
+          <div class="brand-mark">K</div>
+          <div>Kubernetes Designer<small>Architecture workspace</small></div>
+        </div>
+        <div class="meta-fields" aria-label="架構圖資訊">
+          <input id="metaName" class="meta-input" aria-label="Architecture Name" value="Production Kubernetes Application">
+          <select id="metaEnvironment" class="env-select" aria-label="Environment">
+            <option>DEV</option><option>STAGING</option><option selected>PRODUCTION</option>
+          </select>
+          <input id="metaVersion" class="meta-input" aria-label="Version" value="v2.3">
+          <input id="metaOwner" class="meta-input" aria-label="Owner" value="AI Platform Team">
+        </div>
+        <div class="header-actions">
+          <a class="btn ghost" href="../generator/" title="回到 Manifest 問卷產生器" style="text-decoration:none">問卷產生器</a>
+          <button class="btn ghost" id="tutorialBtn" title="開啟部署教學">部署教學</button>
+          <button class="btn primary" id="saveBtn" title="儲存至此瀏覽器">儲存</button>
+        </div>
+      </div>
+      <nav class="tool-row" aria-label="Architecture tools">
+        <div class="tool-group">
+          <button class="btn" id="templateBtn">範本</button>
+          <button class="btn icon active" id="selectModeBtn" title="選取工具 (V)" aria-label="選取工具">↖</button>
+          <button class="btn icon" id="panModeBtn" title="平移工具 (H)" aria-label="平移工具">✥</button>
+          <button class="btn icon" id="connectModeBtn" title="連線工具 (C)" aria-label="連線工具">↗</button>
+        </div>
+        <div class="tool-group">
+          <button class="btn icon" id="undoBtn" title="復原 Ctrl+Z" aria-label="復原">↶</button>
+          <button class="btn icon" id="redoBtn" title="重做 Ctrl+Y" aria-label="重做">↷</button>
+          <button class="btn icon danger" id="deleteBtn" title="刪除 Delete" aria-label="刪除">⌫</button>
+        </div>
+        <div class="tool-group">
+          <button class="btn icon" id="zoomOutBtn" aria-label="縮小">−</button>
+          <span class="zoom-readout" id="zoomReadout">100%</span>
+          <button class="btn icon" id="zoomInBtn" aria-label="放大">＋</button>
+          <button class="btn" id="fitBtn">適合畫面</button>
+          <button class="btn" id="resetViewBtn">重設</button>
+          <button class="btn active" id="gridBtn" aria-pressed="true">網格</button>
+          <button class="btn active" id="snapBtn" aria-pressed="true">吸附</button>
+        </div>
+        <div class="tool-group">
+          <select class="btn" id="layoutDirection" aria-label="自動排列方向"><option value="TB">上 → 下</option><option value="LR">左 → 右</option></select>
+          <button class="btn" id="layoutBtn">自動排列</button>
+        </div>
+        <div class="tool-group">
+          <div class="search-box">
+            <input id="architectureSearch" type="search" placeholder="搜尋架構…" aria-label="搜尋架構">
+            <button class="search-clear hidden" id="searchClear" aria-label="清除搜尋">×</button>
+          </div>
+        </div>
+        <div class="tool-group">
+          <button class="btn" id="exportBtn">匯出 ▾</button>
+          <button class="btn" id="importBtn">匯入 JSON</button>
+          <input id="importFile" type="file" accept="application/json,.json" class="hidden">
+        </div>
+        <div class="tool-group">
+          <button class="btn icon" id="leftToggle" title="收合元件庫" aria-label="收合元件庫">☰</button>
+          <button class="btn icon" id="rightToggle" title="收合屬性面板" aria-label="收合屬性面板">⚙</button>
+        </div>
+      </nav>
+    </header>
+
+    <main class="workspace" id="workspace">
+      <aside class="sidebar left" aria-label="元件庫">
+        <div class="sidebar-header"><h2>Component Palette</h2><span id="paletteCount"></span></div>
+        <div class="sidebar-tabs" role="tablist">
+          <button class="active" data-palette-tab="kubernetes" role="tab">Kubernetes</button>
+          <button data-palette-tab="application" role="tab">Application</button>
+        </div>
+        <input class="palette-search" id="paletteSearch" type="search" placeholder="搜尋元件…" aria-label="搜尋元件">
+        <div class="sidebar-body" id="palette"></div>
+      </aside>
+
+      <section class="stage" id="stage" aria-label="Architecture Canvas">
+        <svg id="canvas" role="application" aria-label="Kubernetes architecture canvas" tabindex="0">
+          <defs>
+            <pattern id="minorGrid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M 20 0 L 0 0 0 20" fill="none" stroke="#edf1f6" stroke-width="1"/></pattern>
+            <pattern id="majorGrid" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#minorGrid)"/><path d="M 100 0 L 0 0 0 100" fill="none" stroke="#dde5ef" stroke-width="1"/></pattern>
+            <marker id="arrow-traffic" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#58708e"/></marker>
+            <marker id="arrow-database" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7b5aa6"/></marker>
+            <marker id="arrow-replication" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#b36c20"/></marker>
+            <marker id="arrow-monitoring" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#27836a"/></marker>
+            <marker id="arrow-backup" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7c6c91"/></marker>
+            <marker id="arrow-logging" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#526c85"/></marker>
+            <marker id="arrow-storage" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#3c7d9f"/></marker>
+            <marker id="arrow-cicd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#506b9b"/></marker>
+            <marker id="arrow-management" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/></marker>
+            <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#24344d" flood-opacity=".1"/></filter>
+          </defs>
+          <rect id="gridRect" width="100%" height="100%" fill="url(#majorGrid)"/>
+          <g id="viewport">
+            <g id="world">
+              <g id="groupLayer"></g>
+              <g id="edgeLayer"></g>
+              <g id="nodeLayer"></g>
+              <g id="overlayLayer"></g>
+            </g>
+          </g>
+        </svg>
+        <div class="canvas-drop-hint">放開以新增元件</div>
+        <div class="canvas-badge"><span class="badge env-production" id="canvasEnv">PRODUCTION</span><span class="badge" id="canvasStats">0 nodes · 0 connections</span></div>
+        <button class="btn icon stage-panel-toggle" id="stageRightToggle" title="開啟／收合屬性面板" aria-label="開啟或收合屬性面板">⚙</button>
+        <div class="stage-tools" aria-label="Canvas quick tools">
+          <button class="btn" id="stageZoomIn" aria-label="放大">＋</button>
+          <button class="btn" id="stageZoomOut" aria-label="縮小">−</button>
+          <button class="btn" id="stageFit" aria-label="適合畫面">⌗</button>
+        </div>
+        <div class="minimap-wrap"><span class="minimap-title">Mini map</span><svg id="minimap" aria-label="架構縮圖"></svg></div>
+      </section>
+
+      <aside class="sidebar right" aria-label="屬性面板">
+        <div class="sidebar-header"><h2>Properties</h2><span id="selectionCount"></span></div>
+        <div class="sidebar-body" id="inspector"></div>
+      </aside>
+    </main>
+
+    <footer class="statusbar">
+      <span id="statusMode">選取模式</span><span id="statusPosition">X 0 · Y 0</span><span id="statusSnap">Snap 20px</span><span id="statusMessage">已載入 Production Kubernetes Application</span><span>離線單檔 · Vanilla JavaScript · SVG</span><nav class="status-links" aria-label="網站政策"><a href="../privacy/">隱私權</a><a href="../privacy/#cookies">Cookie</a><a href="../licenses/">第三方授權</a></nav>
+    </footer>
+  </div>
+
+  <div class="modal-backdrop hidden" id="templateModal" role="dialog" aria-modal="true" aria-labelledby="templateTitle">
+    <div class="modal">
+      <div class="modal-head"><div><h2 id="templateTitle">Architecture Templates</h2><p>選擇範本會取代目前圖面，之後仍可自由編輯。</p></div><button class="btn icon" data-close-modal="templateModal" aria-label="關閉">×</button></div>
+      <div class="modal-body"><div class="template-grid" id="templateGrid"></div></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="tutorialModal" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle">
+    <div class="modal wide">
+      <div class="modal-head"><div><h2 id="tutorialTitle">Production Kubernetes Application｜部署教學</h2><p>將範例架構圖轉成可執行的部署順序與驗證清單。</p></div><button class="btn icon" data-close-modal="tutorialModal" aria-label="關閉">×</button></div>
+      <div class="tutorial-layout"><nav class="tutorial-nav" id="tutorialNav" aria-label="部署教學步驟"></nav><article class="tutorial-content" id="tutorialContent"></article></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="modal">
+      <div class="modal-head"><div><h2 id="helpTitle">操作說明與快捷鍵</h2><p>滑鼠、鍵盤與資料保存方式。</p></div><button class="btn icon" data-close-modal="helpModal" aria-label="關閉">×</button></div>
+      <div class="modal-body" id="helpContent"></div>
+    </div>
+  </div>
+
+  <div class="quick-add hidden" id="quickAdd"><input id="quickSearch" placeholder="快速新增元件…" aria-label="快速新增元件"><div class="quick-list" id="quickList"></div></div>
+  <div class="context-menu hidden" id="contextMenu"></div>
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+
+  <script>
+  'use strict';
+
+  // Application code is intentionally organized as small managers even though
+  // this deliverable must remain a single, offline HTML file.
+  const NS = 'http://www.w3.org/2000/svg';
+  const STORAGE_KEY = 'k8s-architecture-designer.document.v1';
+  const SCHEMA = 'k8s-architecture-designer';
+  const DOC_VERSION = 1;
+  const deepClone = value => JSON.parse(JSON.stringify(value));
+  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+  const uid = prefix => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const snap = (value, size) => Math.round(value / size) * size;
+  const isEditable = target => !!target.closest('input, textarea, select, [contenteditable="true"]');
+  const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+  const svgEl = (name, attrs = {}, text = null) => {
+    const element = document.createElementNS(NS, name);
+    Object.entries(attrs).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) element.setAttribute(key, String(value));
+    });
+    if (text !== null) element.textContent = String(text);
+    return element;
+  };
+  const fileSafeName = value => String(value || 'architecture').trim().replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '') || 'architecture';
+  const debounce = (fn, delay = 250) => {
+    let timer;
+    return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); };
+  };
+
+  const TYPE_COLORS = {
+    kubernetes: '#326ce5', workload: '#326ce5', networking: '#2870c7', configuration: '#6d64c4',
+    storage: '#3c7d9f', autoscaling: '#3074a4', structure: '#326ce5', security: '#8b5aa5', operator: '#4667b1',
+    frontend: '#2f7ec1', backend: '#31785f', database: '#795aa6', queue: '#ba7027', ai: '#4d68ad',
+    observability: '#267d78', devops: '#52657c', external: '#677286', group: '#326ce5'
+  };
+
+  const COMPONENT_GROUPS = {
+    kubernetes: {
+      Workloads: ['Pod','Deployment','StatefulSet','DaemonSet','ReplicaSet','Job','CronJob'],
+      Networking: ['Service','ClusterIP','NodePort','LoadBalancer','Ingress','Ingress Controller','Gateway','NetworkPolicy'],
+      Configuration: ['ConfigMap','Secret'],
+      Storage: ['PersistentVolume','PersistentVolumeClaim','StorageClass'],
+      Autoscaling: ['HPA','VPA'],
+      'Kubernetes Structure': ['Cluster','Namespace','Node','Node Pool','Control Plane'],
+      Security: ['ServiceAccount','RBAC','Role','RoleBinding'],
+      Operator: ['Operator','Custom Resource','CloudNativePG Operator']
+    },
+    application: {
+      Frontend: ['React','Vue','Angular','Nginx','Static Web'],
+      Backend: ['Python','FastAPI','Flask','Django','Java','Spring Boot','Node.js','REST API','gRPC Service'],
+      Database: ['PostgreSQL','MySQL','MongoDB','Redis'],
+      'Message Queue': ['Kafka','RabbitMQ','Queue'],
+      Storage: ['MinIO','S3','NFS','Object Storage','File Storage'],
+      'AI / ML': ['PyTorch','TensorFlow','vLLM','Model Server','GPU Pod','Inference Service'],
+      Observability: ['Prometheus','Grafana','Loki','Fluent Bit','Elasticsearch','OpenTelemetry','Jaeger','Tempo'],
+      DevOps: ['Git','GitLab','GitLab CI','GitHub','Container Registry','Harbor','ArgoCD','Helm']
+    }
+  };
+
+  const GROUP_TYPES = new Set(['Cluster','Namespace','Node','Node Pool','Control Plane','Application Group','Database Group']);
+  const CATEGORY_MAP = {
+    Workloads:'workload', Networking:'networking', Configuration:'configuration', Storage:'storage', Autoscaling:'autoscaling',
+    'Kubernetes Structure':'structure', Security:'security', Operator:'operator', Frontend:'frontend', Backend:'backend',
+    Database:'database', 'Message Queue':'queue', 'AI / ML':'ai', Observability:'observability', DevOps:'devops'
+  };
+  const COMPONENTS = [];
+  Object.entries(COMPONENT_GROUPS).forEach(([library, sections]) => {
+    Object.entries(sections).forEach(([section, names]) => names.forEach(name => COMPONENTS.push({
+      type: name, library, section, category: CATEGORY_MAP[section] || (library === 'kubernetes' ? 'kubernetes' : 'external')
+    })));
+  });
+  ['Application Group','Database Group','Internet','Client','Developer','Worker','Test','Docker Build','GitOps Repository','Kubernetes'].forEach(type => {
+    if (!COMPONENTS.some(c => c.type === type)) COMPONENTS.push({type, library:'application', section:'General', category:'external'});
+  });
+
+  function componentInfo(type) {
+    return COMPONENTS.find(component => component.type === type) || {type, library:'application', section:'General', category:'external'};
+  }
+
+  function iconGlyph(type) {
+    const text = String(type || '?');
+    if (/Postgre|MySQL|Mongo|Redis|Storage|Volume|MinIO|S3|NFS/i.test(text)) return 'DB';
+    if (/Service|Ingress|Gateway|Load|Network/i.test(text)) return '↔';
+    if (/Deployment|Pod|Set|Job|Worker/i.test(text)) return '⬡';
+    if (/Cluster|Namespace|Node Pool|Control Plane|Group/i.test(text)) return '▦';
+    if (/Prometheus|Grafana|Loki|Tempo|Jaeger|Telemetry|Elastic/i.test(text)) return '◉';
+    if (/Git|Argo|Registry|Harbor|Helm|Docker|CI/i.test(text)) return '⌁';
+    if (/AI|GPU|vLLM|Torch|Tensor|Model|Inference/i.test(text)) return 'AI';
+    if (/Secret|RBAC|Role|Account|Policy/i.test(text)) return '◆';
+    if (/React|Vue|Angular|Nginx|Web/i.test(text)) return 'UI';
+    if (/FastAPI|Python|Flask|Django|Java|Spring|Node.js|API|gRPC/i.test(text)) return '{}';
+    return text.slice(0, 2).toUpperCase();
+  }
+
+  class EventBus {
+    constructor() { this.listeners = new Map(); }
+    on(name, callback) { if (!this.listeners.has(name)) this.listeners.set(name, new Set()); this.listeners.get(name).add(callback); return () => this.listeners.get(name)?.delete(callback); }
+    emit(name, payload) { this.listeners.get(name)?.forEach(callback => callback(payload)); }
+  }
+
+  class DocumentCodec {
+    static createEmpty(meta = {}) {
+      return {
+        schema: SCHEMA,
+        version: DOC_VERSION,
+        meta: { id: uid('architecture'), name:'Untitled Architecture', environment:'DEV', architectureVersion:'v1.0', owner:'Platform Team', ...meta },
+        settings: { theme:'light', showGrid:true, snapToGrid:true, gridSize:20, layoutDirection:'TB', guideId:null },
+        viewport: { x:60, y:50, scale:1 },
+        nodes: [], groups: [], edges: []
+      };
+    }
+
+    static normalize(raw) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('JSON 根節點必須是物件。');
+      const base = this.createEmpty();
+      const rawMeta = raw.meta && typeof raw.meta === 'object' ? raw.meta : {};
+      const rawSettings = raw.settings && typeof raw.settings === 'object' ? raw.settings : {};
+      const rawViewport = raw.viewport && typeof raw.viewport === 'object' ? raw.viewport : {};
+      const environment = String(rawMeta.environment ?? base.meta.environment).toUpperCase();
+      const doc = {
+        ...base,
+        schema: raw.schema || SCHEMA,
+        version: Number(raw.version || raw.schemaVersion || 1),
+        meta: {
+          id:String(rawMeta.id ?? base.meta.id).slice(0,120), name:String(rawMeta.name ?? base.meta.name).slice(0,200),
+          environment:['DEV','STAGING','PRODUCTION'].includes(environment)?environment:'DEV',
+          architectureVersion:String(rawMeta.architectureVersion ?? rawMeta.version ?? base.meta.architectureVersion).slice(0,80),
+          owner:String(rawMeta.owner ?? base.meta.owner).slice(0,160)
+        },
+        settings: {
+          ...base.settings, theme:rawSettings.theme==='dark'?'dark':'light', showGrid:rawSettings.showGrid!==false,
+          snapToGrid:rawSettings.snapToGrid!==false, gridSize:Number(rawSettings.gridSize ?? base.settings.gridSize),
+          layoutDirection:rawSettings.layoutDirection==='LR'?'LR':'TB', guideId:rawSettings.guideId?String(rawSettings.guideId).slice(0,100):null
+        },
+        viewport: {x:Number(rawViewport.x ?? base.viewport.x),y:Number(rawViewport.y ?? base.viewport.y),scale:Number(rawViewport.scale ?? base.viewport.scale)},
+        nodes: Array.isArray(raw.nodes) ? raw.nodes.map(item => this.normalizeNode(item)) : [],
+        groups: Array.isArray(raw.groups) ? raw.groups.map(item => this.normalizeGroup(item)) : [],
+        edges: Array.isArray(raw.edges) ? raw.edges.map(item => this.normalizeEdge(item)) : []
+      };
+      this.validate(doc);
+      return doc;
+    }
+
+    static normalizeNode(item = {}) {
+      const info = componentInfo(item.type || 'Deployment');
+      return {
+        id: String(item.id || uid('node')).slice(0,160), type: String(item.type || 'Deployment').slice(0,100), category: String(item.category || info.category).slice(0,60),
+        name: String(item.name || item.type || 'Node').slice(0,240), subtitle: String(item.subtitle || '').slice(0,500), description: String(item.description || '').slice(0,4000),
+        status: ['Healthy','Warning','Error','Disabled'].includes(String(item.status))?String(item.status):'Healthy', x: Number(item.x ?? 100), y: Number(item.y ?? 100),
+        width: Number(item.width ?? 184), height: Number(item.height ?? 88), parentId: item.parentId ? String(item.parentId) : null,
+        z: Number(item.z ?? 1), icon: String(item.icon || item.type || 'Node').slice(0,100), color: /^#[0-9a-f]{6}$/i.test(String(item.color||''))?String(item.color):TYPE_COLORS[info.category] || '#326ce5',
+        properties: {...(item.properties&&typeof item.properties==='object'?item.properties:{})}
+      };
+    }
+
+    static normalizeGroup(item = {}) {
+      return {
+        id: String(item.id || uid('group')).slice(0,160), type: String(item.type || 'Namespace').slice(0,100), name: String(item.name || item.type || 'Group').slice(0,240),
+        subtitle: String(item.subtitle || '').slice(0,500), x: Number(item.x ?? 80), y: Number(item.y ?? 80), width: Number(item.width ?? 520),
+        height: Number(item.height ?? 320), parentId: item.parentId ? String(item.parentId) : null, z: Number(item.z ?? 0),
+        collapsed: Boolean(item.collapsed), color: /^#[0-9a-f]{6}$/i.test(String(item.color||''))?String(item.color):'#326ce5', properties:{...(item.properties&&typeof item.properties==='object'?item.properties:{})}
+      };
+    }
+
+    static normalizeEdge(item = {}) {
+      const source = typeof item.source === 'object' ? item.source.id : item.source;
+      const target = typeof item.target === 'object' ? item.target.id : item.target;
+      return {
+        id: String(item.id || uid('edge')), source: String(source || ''), target: String(target || ''),
+        sourcePort: item.sourcePort || item.source?.port || 'auto', targetPort: item.targetPort || item.target?.port || 'auto',
+        type: ['traffic','database','replication','backup','monitoring','logging','storage','cicd','management'].includes(String(item.type))?String(item.type):'traffic', label: String(item.label || '').slice(0,500), directed: item.directed !== false,
+        dashed: Boolean(item.dashed || item.lineStyle === 'dashed'), animated: Boolean(item.animated), z: Number(item.z ?? 0)
+      };
+    }
+
+    static validate(doc) {
+      if (doc.schema !== SCHEMA) throw new Error('不支援的架構檔格式。');
+      if(!Number.isFinite(doc.version)||doc.version<1)throw new Error('架構檔版本無效。');
+      if(doc.version>DOC_VERSION)throw new Error(`此檔案需要較新的 Designer（版本 ${doc.version}）。`);
+      if(doc.nodes.length>5000||doc.groups.length>1000||doc.edges.length>10000)throw new Error('架構檔物件數量超過安全上限。');
+      const all = [...doc.nodes, ...doc.groups];
+      const ids = new Set();
+      for (const item of [...all, ...doc.edges]) {
+        if (!item.id || ids.has(item.id)) throw new Error(`ID 重複或遺失：${item.id || '(empty)'}`);
+        ids.add(item.id);
+      }
+      for (const item of all) {
+        for (const key of ['x','y','width','height','z']) if (!Number.isFinite(item[key])) throw new Error(`${item.name} 的 ${key} 不是有效數字。`);
+        if (item.width < 40 || item.height < 36) throw new Error(`${item.name} 的尺寸過小。`);
+        if(Math.abs(item.x)>1000000||Math.abs(item.y)>1000000||item.width>100000||item.height>100000)throw new Error(`${item.name} 的座標或尺寸超過安全範圍。`);
+      }
+      const entityIds = new Set(all.map(item => item.id));
+      const groupIds = new Set(doc.groups.map(group => group.id));
+      for (const item of all) if (item.parentId && !groupIds.has(item.parentId)) throw new Error(`${item.name} 指向不存在的群組。`);
+      for (const edge of doc.edges) { if (!Number.isFinite(edge.z)) throw new Error(`連線 ${edge.id} 的 layer 無效。`); if (!entityIds.has(edge.source) || !entityIds.has(edge.target)) throw new Error(`連線 ${edge.id} 的端點不存在。`); }
+      const parents = new Map(all.map(item => [item.id, item.parentId]));
+      for (const group of doc.groups) {
+        const seen = new Set([group.id]); let cursor = group.parentId;
+        while (cursor) { if (seen.has(cursor)) throw new Error(`群組 ${group.name} 發生循環包含。`); seen.add(cursor); cursor = parents.get(cursor); }
+      }
+      if(!Number.isFinite(doc.viewport.x)||!Number.isFinite(doc.viewport.y)||!Number.isFinite(doc.viewport.scale))throw new Error('Viewport 含有無效數字。');
+      doc.viewport.scale = clamp(Number(doc.viewport.scale) || 1, .2, 3);
+      doc.settings.gridSize = clamp(Number(doc.settings.gridSize) || 20, 5, 100);
+      return true;
+    }
+  }
+
+  class HistoryManager {
+    constructor(bus, limit = 80) { this.bus = bus; this.limit = limit; this.stack = []; this.index = -1; }
+    reset(state, label = 'Initial') { this.stack = [{state:deepClone(state), label}]; this.index = 0; this.emit(); }
+    push(state, label) {
+      this.stack = this.stack.slice(0, this.index + 1);
+      this.stack.push({state:deepClone(state), label});
+      if (this.stack.length > this.limit) this.stack.shift(); else this.index++;
+      this.index = this.stack.length - 1; this.emit();
+    }
+    canUndo() { return this.index > 0; }
+    canRedo() { return this.index < this.stack.length - 1; }
+    undo() { if (!this.canUndo()) return null; this.index--; this.emit(); return deepClone(this.stack[this.index].state); }
+    redo() { if (!this.canRedo()) return null; this.index++; this.emit(); return deepClone(this.stack[this.index].state); }
+    emit() { this.bus.emit('history:changed', {canUndo:this.canUndo(), canRedo:this.canRedo(), label:this.stack[this.index]?.label}); }
+  }
+
+  class StateManager {
+    constructor(bus, history, initial) { this.bus = bus; this.history = history; this.doc = DocumentCodec.normalize(initial); this.history.reset(this.doc); }
+    get state() { return this.doc; }
+    entity(id) { return this.doc.nodes.find(n => n.id === id) || this.doc.groups.find(g => g.id === id) || this.doc.edges.find(e => e.id === id); }
+    nodeOrGroup(id) { return this.doc.nodes.find(n => n.id === id) || this.doc.groups.find(g => g.id === id); }
+    mutatePreview(mutator, detail = {}) { mutator(this.doc); this.bus.emit('document:preview', detail); }
+    commit(label, mutator = null) {
+      const before = deepClone(this.doc);
+      try {
+        if (mutator) mutator(this.doc);
+        DocumentCodec.validate(this.doc);
+        this.history.push(this.doc, label);
+        this.bus.emit('document:committed', {label});
+      } catch (error) {
+        this.doc = before;
+        this.bus.emit('document:loaded', {label:'Rollback invalid change'});
+        throw error;
+      }
+    }
+    replace(next, label = 'Import Architecture', record = true) {
+      this.doc = DocumentCodec.normalize(deepClone(next));
+      if (record) this.history.push(this.doc, label); else this.history.reset(this.doc, label);
+      this.bus.emit('document:loaded', {label});
+    }
+    restore(snapshot, label) { this.doc = DocumentCodec.normalize(snapshot); this.bus.emit('document:loaded', {label}); }
+  }
+
+  class SelectionManager {
+    constructor(bus, state) { this.bus = bus; this.state = state; this.ids = new Set(); this.kind = null; }
+    set(ids, kind = null) { this.ids = new Set(ids.filter(id => this.state.entity(id))); this.kind = kind; this.emit(); }
+    single(id, kind = null) { this.set(id ? [id] : [], kind); }
+    toggle(id, kind = null) { this.ids.has(id) ? this.ids.delete(id) : this.ids.add(id); this.kind = kind; this.emit(); }
+    clear() { if (!this.ids.size) return; this.ids.clear(); this.kind = null; this.emit(); }
+    has(id) { return this.ids.has(id); }
+    first() { const id = this.ids.values().next().value; return id ? this.state.entity(id) : null; }
+    sanitize() { this.set([...this.ids], this.kind); }
+    emit() { this.bus.emit('selection:changed', {ids:[...this.ids], kind:this.kind}); }
+  }
+
+  function node(type, name, x, y, options = {}) {
+    return DocumentCodec.normalizeNode({id:options.id || uid('node'), type, name, x, y, ...options, properties:{...(options.properties || {})}});
+  }
+  function group(type, name, x, y, width, height, options = {}) {
+    return DocumentCodec.normalizeGroup({id:options.id || uid('group'), type, name, x, y, width, height, ...options});
+  }
+  function edge(source, target, label = '', options = {}) {
+    return DocumentCodec.normalizeEdge({id:options.id || uid('edge'), source, target, label, ...options});
+  }
+
+  const TUTORIALS = {
+    'production-k8s': {
+      title: 'Production Kubernetes Application',
+      steps: [
+        {
+          title:'0. 先確認叢集與權限', targets:['cluster-prod'],
+          lead:'在 Production 執行任何動作前，先確認目前 context、節點、StorageClass 與你的權限。此教學只說明部署順序，不會連線或變更任何真實叢集。',
+          commands:'kubectl config current-context\nkubectl cluster-info\nkubectl get nodes\nkubectl get storageclass\nkubectl auth can-i create deployments -n production\nhelm version',
+          verify:'確認 context 是預期叢集、所有必要 Node Ready，且 Production 變更已通過組織的審核流程。',
+          warning:'不要只依名稱判斷叢集。上線前應再次核對 API Server 位址、帳號與變更單。'
+        },
+        {
+          title:'1. Namespace、設定與 Secret', targets:['ns-edge','ns-app','ns-data','ns-observe','ns-gitops'],
+          lead:'先建立資源邊界，再準備 ConfigMap、Secret、Quota、NetworkPolicy 與 StorageClass。圖中的群組對應各工作負載的責任區。',
+          commands:'kubectl create namespace ingress-system --dry-run=client -o yaml | kubectl apply -f -\nkubectl create namespace production --dry-run=client -o yaml | kubectl apply -f -\nkubectl create namespace data --dry-run=client -o yaml | kubectl apply -f -\nkubectl create namespace observability --dry-run=client -o yaml | kubectl apply -f -\nkubectl create namespace gitops --dry-run=client -o yaml | kubectl apply -f -\nkubectl apply --server-side --dry-run=server -f <manifest-directory>',
+          verify:'以 server-side dry-run 檢查 manifest，並確認預設 StorageClass 與命名空間政策。尖括號內容必須替換成你的實際路徑。',
+          warning:'Secret 的 base64 不是加密。不要將正式密碼、Token 或私鑰直接提交到 Git 或輸入 shell history。'
+        },
+        {
+          title:'2. Ingress Controller', targets:['ingress-controller','ingress'],
+          lead:'Ingress Resource 需要已運作的 Controller 與相符的 IngressClass。先部署 Controller，再套用路由。',
+          commands:'helm upgrade --install ingress-controller <chart-ref-or-local-path> --namespace ingress-system --create-namespace --values <values-file>\nkubectl -n ingress-system rollout status deployment/<controller-deployment> --timeout=5m\nkubectl get ingressclass',
+          verify:'Controller Pod 必須 Ready；後續 Ingress 的 ingressClassName 必須與實際 IngressClass 一致。',
+          warning:'正式環境需配置 TLS、真實 DNS、來源 IP 策略、Rate Limit 與適當的逾時。'
+        },
+        {
+          title:'3. PostgreSQL HA 與儲存', targets:['pg-operator','pg-rw','pg-ro','pg-primary','pg-standby-1','pg-standby-2'],
+          lead:'若採 CloudNativePG 等 Operator，順序是 CRD／Operator、Secret 與 PVC、Database Cluster，最後才是 RW／RO Service 與應用連線。',
+          commands:'helm upgrade --install postgresql-operator <chart-ref-or-local-path> --namespace database-system --create-namespace --values <operator-values>\nkubectl apply -f <manifest-directory>/postgresql\nkubectl -n data wait --for=condition=Ready pod -l <postgres-label-selector> --timeout=10m\nkubectl -n data get pod,pvc,svc,endpointslice',
+          verify:'確認 Primary 與 Standby Ready、PVC Bound、RW Service 指向 Primary，並實際演練備份與還原。',
+          warning:'Standby 不等於備份。Production 仍需異地備份、PITR、容量告警與定期還原演練。'
+        },
+        {
+          title:'4. Redis Cache', targets:['redis'],
+          lead:'先讓後端依賴的 Cache 可用，再部署 API；範例中的 Redis 用來降低重複查詢與暫存短期狀態。',
+          commands:'kubectl apply -f <manifest-directory>/redis\nkubectl -n data wait --for=condition=Ready pod -l <redis-label-selector> --timeout=5m\nkubectl -n data get pod,svc,endpointslice',
+          verify:'檢查 Service Endpoint、健康檢查、記憶體限制、eviction policy，以及應用在 Cache miss 時仍能正確運作。',
+          warning:'若 Redis 承載不可遺失的資料，必須另外規劃持久化、複寫與故障切換；不要把快取當成唯一資料來源。'
+        },
+        {
+          title:'5. MinIO Object Storage', targets:['minio'],
+          lead:'MinIO 承載物件資料；Production 應使用持久儲存、固定映像版本、TLS，以及符合故障域設計的分散式配置。',
+          commands:'kubectl apply -f <manifest-directory>/minio\nkubectl -n data wait --for=condition=Ready pod -l <minio-label-selector> --timeout=10m\nkubectl -n data get pod,pvc,svc,endpointslice',
+          verify:'檢查 PVC Bound、Service Endpoint、TLS、bucket policy、容量告警，並實際驗證上傳與下載。',
+          warning:'單一 PVC 或單一 Pod 不等於備份；正式環境仍需版本控管、異地備份、restore 演練與最小權限憑證。'
+        },
+        {
+          title:'6. Backend 與 Frontend', targets:['backend-service','fastapi','frontend-service','frontend'],
+          lead:'可先建立 Service；Endpoint 會在 Pod Ready 後出現。資料庫 Migration 應在 PostgreSQL Ready 後、Backend 接受流量前完成。',
+          commands:'kubectl apply -f <manifest-directory>/config\nkubectl apply -f <manifest-directory>/services\nkubectl apply -f <manifest-directory>/jobs/db-migrate.yaml\nkubectl -n production wait --for=condition=complete job/db-migrate --timeout=10m\nkubectl apply -f <manifest-directory>/deployments\nkubectl -n production rollout status deployment/frontend --timeout=5m\nkubectl -n production rollout status deployment/backend --timeout=5m',
+          verify:'確認 readiness、liveness、startup probes、requests／limits、固定 image tag 或 digest，以及 Service Endpoint。',
+          warning:'不要在 Production 使用 latest tag。Migration 也必須有向前相容與回復策略。'
+        },
+        {
+          title:'7. 套用 Ingress 路由', targets:['ingress','frontend-service','backend-service'],
+          lead:'在兩個應用 Service Ready 後，再套用 / 與 /api 路由，避免入口在後端尚未就緒時開始收流量。',
+          commands:'kubectl apply -f <manifest-directory>/ingress\nkubectl -n production get ingress\nkubectl -n production describe ingress <ingress-name>\nkubectl -n production get svc,endpointslice',
+          verify:'核對 TLS Secret、Hostname、IngressClass、/ 與 /api 的 Service port；再從叢集外測試 HTTPS。',
+          warning:'FastAPI 若不接受 /api 前綴，必須在應用或 Controller 中明確處理 rewrite。'
+        },
+        {
+          title:'8. Observability', targets:['prometheus','grafana'],
+          lead:'Prometheus 擷取應用 metrics，Grafana 查詢 Prometheus。上線不只要有 Dashboard，也要有可行動的 Alert。',
+          commands:'helm upgrade --install observability <chart-ref-or-local-path> --namespace observability --create-namespace --values <values-file>\nkubectl -n observability get pod,svc\nkubectl -n observability port-forward svc/grafana 3000:80',
+          verify:'檢查 Prometheus Targets、Grafana Data Source、告警規則、資料保留時間與磁碟容量。',
+          warning:'port-forward 僅適合受控的管理與驗證情境，不是 Production 對外發布方式。'
+        },
+        {
+          title:'9. CI/CD 與 ArgoCD', targets:['gitlab','gitlab-ci','registry','gitops-repo','argocd','cluster-prod'],
+          lead:'CI 負責 Test／Build 並推送 immutable image；再更新 GitOps Repository。ArgoCD 監看 Git，而 Kubernetes 工作負載從 Registry 拉取 image。',
+          commands:'helm upgrade --install argocd <chart-ref-or-local-path> --namespace gitops --create-namespace --values <values-file>\nkubectl apply -f <gitops-bootstrap-directory>\nkubectl -n gitops get applications\nkubectl -n gitops get applications --watch',
+          verify:'確認 Git commit、image digest、ArgoCD Diff／Sync 狀態與實際 Deployment image 完全一致。',
+          warning:'接管既有資源時，先停用 automated sync、比對 ArgoCD Diff 並確認資源 ownership；停止手動 apply 後，再逐步啟用 Sync、Prune 與 Self Heal。'
+        },
+        {
+          title:'10. 驗證、除錯與復原', targets:['fastapi','frontend','pg-primary'],
+          lead:'最後以服務路徑、事件、Log、指標及復原演練完成驗收；不是看到 Pod Running 就代表上線成功。',
+          commands:'kubectl -n production get deploy,pod,svc,ingress\nkubectl -n data get pod,pvc,svc\nkubectl get events -A --sort-by=.lastTimestamp\nkubectl -n production logs deployment/backend --tail=200\nkubectl -n production rollout history deployment/backend\nkubectl -n production rollout undo deployment/backend\nhelm list -A',
+          verify:'測試 /、/api、資料庫寫入、快取 miss、物件儲存、監控告警與一次可控的 rollback。',
+          warning:'Deployment rollback 不會自動回復資料庫 schema。資料庫 Migration 必須有獨立且已演練的回復方案。'
+        }
+      ]
+    },
+    'single-node-fullstack': {
+      title:'前後端單副本部署示範',
+      steps:[
+        {
+          title:'0. 部署前檢查', targets:['demo-namespace'],
+          lead:'此範本對應 frontend-backend-single-replica.yaml：前端與後端各 1 個 Replica，適合本機叢集、教學與功能驗證。',
+          commands:'kubectl config current-context\nkubectl get nodes\nkubectl apply --server-side --dry-run=server -f frontend-backend-single-replica.yaml',
+          verify:'確認目前 context 是測試叢集、至少一個 Node Ready，且 dry-run 沒有 schema 或權限錯誤。',
+          warning:'此範本不是高可用架構；單一 Pod 或單一 Kubernetes Node 故障都可能造成服務中斷。'
+        },
+        {
+          title:'1. 建立 Namespace 與設定', targets:['demo-namespace','demo-frontend-config','demo-backend-config'],
+          lead:'YAML 會建立 fullstack-demo Namespace，以及前後端兩份 Nginx ConfigMap。',
+          commands:'kubectl apply -f frontend-backend-single-replica.yaml\nkubectl -n fullstack-demo get configmap\nkubectl -n fullstack-demo describe configmap frontend-config\nkubectl -n fullstack-demo describe configmap backend-config',
+          verify:'確認兩個 ConfigMap 存在；frontend-config 包含頁面與 /api proxy，backend-config 包含 /api 與 /healthz。',
+          warning:'ConfigMap 適合非機密設定；密碼、Token 與私鑰必須改用 Secret 或外部 Secret 管理。'
+        },
+        {
+          title:'2. 啟動 Backend', targets:['demo-backend-service','demo-backend'],
+          lead:'Backend Deployment 啟動一個 Nginx Pod，在 8080 提供 /api JSON 與 /healthz；ClusterIP Service 只供叢集內存取。',
+          commands:'kubectl -n fullstack-demo rollout status deployment/backend --timeout=3m\nkubectl -n fullstack-demo get pod -l app=backend\nkubectl -n fullstack-demo get service backend\nkubectl -n fullstack-demo get endpointslice -l kubernetes.io/service-name=backend\nkubectl -n fullstack-demo logs deployment/backend --tail=100',
+          verify:'backend Pod 為 1/1 Ready，backend Service 具有 EndpointSlice，Log 沒有設定檔或 bind 錯誤。',
+          warning:'這個 Backend 只回傳示範 JSON；實際專案應替換成自己的 immutable image。'
+        },
+        {
+          title:'3. 啟動 Frontend', targets:['demo-frontend-service','demo-frontend'],
+          lead:'Frontend Deployment 提供靜態頁面，並將同源 /api 請求代理到 backend.fullstack-demo.svc.cluster.local:8080。',
+          commands:'kubectl -n fullstack-demo rollout status deployment/frontend --timeout=3m\nkubectl -n fullstack-demo get pod -l app=frontend\nkubectl -n fullstack-demo get service frontend\nkubectl -n fullstack-demo get endpointslice -l kubernetes.io/service-name=frontend\nkubectl -n fullstack-demo logs deployment/frontend --tail=100',
+          verify:'frontend Pod 為 1/1 Ready，frontend NodePort 為 30080，且 Service 具有 EndpointSlice。',
+          warning:'NodePort 適合簡單測試；正式對外服務通常應使用 LoadBalancer 或 Ingress／Gateway 並配置 TLS。'
+        },
+        {
+          title:'4. 驗證完整路徑', targets:['demo-client','demo-frontend-service','demo-frontend','demo-backend-service','demo-backend'],
+          lead:'瀏覽器先連到 NodePort，前端頁面再透過 /api 呼叫後端；成功時頁面會顯示 Hello from backend。',
+          commands:'kubectl get nodes -o wide\ncurl http://<node-ip>:30080/\ncurl http://<node-ip>:30080/api\nkubectl -n fullstack-demo port-forward service/frontend 8080:80',
+          verify:'NodePort 或 port-forward 的首頁可開啟，/api 回傳 {"message":"Hello from backend"}。',
+          warning:'尖括號 <node-ip> 必須換成實際 Node IP；Docker Desktop、kind 或 minikube 的 NodePort 存取方式可能不同。'
+        },
+        {
+          title:'5. 除錯、回復與移除', targets:['demo-frontend','demo-backend','demo-namespace'],
+          lead:'先看 Pod、Event、Endpoint 與 Log；若更新映像失敗，可回復 Deployment。完成示範後逐一刪除應用資源，刻意保留 Namespace。',
+          commands:'kubectl -n fullstack-demo get pod,svc,endpointslice\nkubectl -n fullstack-demo get events --sort-by=.lastTimestamp\nkubectl -n fullstack-demo logs deployment/frontend --tail=200\nkubectl -n fullstack-demo logs deployment/backend --tail=200\nkubectl -n fullstack-demo rollout undo deployment/frontend\nkubectl -n fullstack-demo rollout undo deployment/backend\nkubectl -n fullstack-demo delete deployment/frontend deployment/backend\nkubectl -n fullstack-demo delete service/frontend service/backend\nkubectl -n fullstack-demo delete configmap/frontend-config backend-config',
+          verify:'確認問題可從 Event、Probe、Service Endpoint 或 Nginx Log 定位；移除後上述應用資源不再存在，fullstack-demo Namespace 仍保留。',
+          warning:'不要用 delete -f 刪除此範例，因為檔案包含 Namespace。只有確認 fullstack-demo 是專用 Namespace、沒有其他資源且資料已備份時，才另行刪除 Namespace。正式環境也應固定 image digest，並加入多副本、PodDisruptionBudget、Ingress/TLS、NetworkPolicy、RBAC 與監控告警。'
+        }
+      ]
+    }
+  };
+
+  const GENERIC_TUTORIAL = {
+    title:'通用 Kubernetes 部署流程',
+    steps:[
+      {title:'1. 檢查環境與相依',targets:[],lead:'先確認目前 Kubernetes context、權限、StorageClass、IngressClass 與圖面中所有外部相依。',commands:'kubectl config current-context\nkubectl get nodes\nkubectl get storageclass\nkubectl get ingressclass',verify:'逐一核對架構圖中的 Namespace、持久儲存、網路入口與必要 Operator。',warning:'此圖是規劃與教學工具，不會替你產生完整 YAML，也不會連線或部署真實叢集。'},
+      {title:'2. 先部署基礎服務',targets:[],lead:'建議順序為 Namespace／Policy／Secret → Storage／Database／Queue → Application Service／Deployment → Ingress。',commands:'kubectl apply --server-side --dry-run=server -f <manifest-directory>\nkubectl apply -f <manifest-directory>/platform\nkubectl get pod,pvc,svc -A',verify:'每一層 Ready 且 Service 具有 Endpoint 後，再部署依賴它的下一層。',warning:'尖括號內容必須換成實際值；正式 Secret 不應以明碼存入 Git。'},
+      {title:'3. 驗證應用與可觀測性',targets:[],lead:'確認 Deployment rollout、Service Endpoint、Ingress 路由，以及 Metrics、Logs、Traces 與 Alert。',commands:'kubectl get deploy,pod,svc,ingress -A\nkubectl rollout status deployment/<deployment> -n <namespace> --timeout=5m\nkubectl get events -A --sort-by=.lastTimestamp',verify:'從使用者入口做端到端測試，不能只以 Pod Running 作為成功條件。',warning:'Production 仍需 TLS、NetworkPolicy、RBAC、PDB、requests／limits、備份及容量告警。'},
+      {title:'4. GitOps 與復原',targets:[],lead:'CI 建置 immutable image 並更新 GitOps Repository；ArgoCD 同步 Git 宣告，Cluster 再從 Registry 拉取映像。',commands:'kubectl -n <namespace> rollout history deployment/<deployment>\nkubectl -n <namespace> rollout undo deployment/<deployment>\nkubectl -n gitops get applications',verify:'事先演練應用 rollback、資料庫 migration 回復與備份還原。',warning:'Deployment rollback 不會回復資料庫 schema；同一資源不要長期由手動 apply 與 GitOps 同時管理。'}
+    ]
+  };
+
+  class TemplateManager {
+    constructor() {
+      this.templates = [
+        {id:'single-node-fullstack', name:'快速範本｜前後端單副本', description:'NodePort → Frontend ×1 → Backend Service → Backend ×1，含專屬部署教學', build:() => this.singleNodeFullstack()},
+        {id:'frontend', name:'1. React + Nginx Frontend', description:'Internet → Ingress → Service → Frontend Deployment', build:() => this.simpleFrontend()},
+        {id:'fastapi', name:'2. FastAPI Backend', description:'Ingress /api → Service → FastAPI ×3 → PostgreSQL', build:() => this.fastApi()},
+        {id:'fullstack', name:'3. Full Stack', description:'React + Nginx 前端與 FastAPI / PostgreSQL 後端', build:() => this.fullStack()},
+        {id:'postgres-ha', name:'4. PostgreSQL HA', description:'CloudNativePG、Primary、兩個 Standby、PVC 與 RW/RO Service', build:() => this.postgresHa()},
+        {id:'redis', name:'5. Backend + Redis', description:'FastAPI 使用 Redis Cache，Cache Miss 回 PostgreSQL', build:() => this.backendRedis()},
+        {id:'workers', name:'6. Queue / Worker', description:'FastAPI → Queue → Workers → PostgreSQL / MinIO', build:() => this.queueWorker()},
+        {id:'ai', name:'7. AI Architecture', description:'FastAPI、vLLM、GPU Pod 與 GPU Node Pool', build:() => this.aiArchitecture()},
+        {id:'observability', name:'8. Observability', description:'Metrics、Logging 與 Tracing 三條觀測路徑', build:() => this.observability()},
+        {id:'cicd', name:'9. CI/CD', description:'GitLab → Test → Build → Registry → Kubernetes', build:() => this.cicd()},
+        {id:'gitops', name:'10. GitOps', description:'CI 更新 GitOps Repository，ArgoCD 同步 Cluster', build:() => this.gitops()}
+      ];
+    }
+
+    base(name) { return DocumentCodec.createEmpty({name, environment:'PRODUCTION', architectureVersion:'v1.0', owner:'Platform Team'}); }
+    finalize(doc) { doc.viewport = doc.viewport || {x:70,y:60,scale:1}; return DocumentCodec.normalize(doc); }
+
+    singleNodeFullstack() {
+      const d=this.base('Frontend + Backend Single Replica');d.meta.environment='DEV';d.meta.architectureVersion='demo-v1';d.meta.owner='Demo Team';d.settings.guideId='single-node-fullstack';
+      d.groups.push(group('Namespace','fullstack-demo',180,110,1070,430,{id:'demo-namespace',subtitle:'Frontend + Backend · 1 Replica each'}));
+      d.nodes.push(
+        node('Client','Browser / Client',0,225,{id:'demo-client',width:150,height:72,subtitle:'External user'}),
+        node('NodePort','frontend',220,205,{id:'demo-frontend-service',parentId:'demo-namespace',width:170,height:82,subtitle:'NodePort · 30080 → 8080',properties:{serviceType:'NodePort',port:80,targetPort:8080,protocol:'TCP',nodePort:30080}}),
+        node('Deployment','frontend',440,190,{id:'demo-frontend',parentId:'demo-namespace',width:190,height:104,subtitle:'Nginx · 1 Replica',properties:{replicas:1,image:'nginx:1.27-alpine',port:8080,cpuRequest:'25m',cpuLimit:'200m',memoryRequest:'32Mi',memoryLimit:'128Mi'}}),
+        node('ClusterIP','backend',700,205,{id:'demo-backend-service',parentId:'demo-namespace',width:170,height:82,subtitle:'ClusterIP · :8080',properties:{serviceType:'ClusterIP',port:8080,targetPort:8080,protocol:'TCP'}}),
+        node('Deployment','backend',920,190,{id:'demo-backend',parentId:'demo-namespace',width:190,height:104,subtitle:'Demo API · 1 Replica',properties:{replicas:1,image:'nginx:1.27-alpine',port:8080,cpuRequest:'25m',cpuLimit:'200m',memoryRequest:'32Mi',memoryLimit:'128Mi'}}),
+        node('ConfigMap','frontend-config',440,360,{id:'demo-frontend-config',parentId:'demo-namespace',width:190,height:76,subtitle:'index.html · /api proxy'}),
+        node('ConfigMap','backend-config',920,360,{id:'demo-backend-config',parentId:'demo-namespace',width:190,height:76,subtitle:'/api · /healthz'})
+      );
+      d.edges.push(
+        edge('demo-client','demo-frontend-service','HTTP :30080'),
+        edge('demo-frontend-service','demo-frontend','HTTP :8080'),
+        edge('demo-frontend','demo-backend-service','/api'),
+        edge('demo-backend-service','demo-backend','HTTP :8080'),
+        edge('demo-frontend-config','demo-frontend','Mount config',{type:'management',dashed:true}),
+        edge('demo-backend-config','demo-backend','Mount config',{type:'management',dashed:true})
+      );
+      d.viewport={x:45,y:45,scale:.78};return this.finalize(d);
+    }
+
+    production() {
+      const doc = this.base('Production Kubernetes Application');
+      doc.meta.architectureVersion = 'v2.3'; doc.meta.owner = 'AI Platform Team'; doc.settings.guideId = 'production-k8s';
+      doc.groups.push(
+        group('Cluster','Production Kubernetes Cluster',180,160,1120,700,{id:'cluster-prod', subtitle:'HA · Multi namespace'}),
+        group('Namespace','ingress-system',210,210,210,230,{id:'ns-edge', parentId:'cluster-prod'}),
+        group('Namespace','production',450,210,390,420,{id:'ns-app', parentId:'cluster-prod'}),
+        group('Namespace','data',870,210,390,500,{id:'ns-data', parentId:'cluster-prod'}),
+        group('Namespace','observability',210,660,300,160,{id:'ns-observe', parentId:'cluster-prod'}),
+        group('Namespace','gitops',540,660,260,160,{id:'ns-gitops', parentId:'cluster-prod'})
+      );
+      doc.nodes.push(
+        node('Internet','Internet',0,250,{id:'internet', width:150, height:72, subtitle:'External traffic'}),
+        node('GitLab','GitLab',220,20,{id:'gitlab', width:150, height:72, subtitle:'External source repository'}),
+        node('GitLab CI','GitLab CI',400,20,{id:'gitlab-ci', width:150, height:72, subtitle:'Test · Build · Scan'}),
+        node('Container Registry','Registry',580,20,{id:'registry', width:150, height:72, subtitle:'External image registry'}),
+        node('GitOps Repository','GitOps Repository',760,20,{id:'gitops-repo', width:170, height:72, subtitle:'External desired state'}),
+        node('Ingress Controller','Ingress Controller',240,280,{id:'ingress-controller', parentId:'ns-edge', width:150, height:78, subtitle:'nginx · Replicas: 3', properties:{replicas:3, image:'registry.local/ingress-nginx:v1.11.2'}}),
+        node('Ingress','Application Ingress',480,260,{id:'ingress', parentId:'ns-app', width:150, height:72, subtitle:'TLS · / · /api', properties:{protocol:'HTTPS', port:443}}),
+        node('Service','frontend-service',480,370,{id:'frontend-service', parentId:'ns-app', width:150, height:72, subtitle:'ClusterIP · 80', properties:{serviceType:'ClusterIP', port:80, targetPort:8080}}),
+        node('Deployment','frontend',660,370,{id:'frontend', parentId:'ns-app', width:150, height:104, subtitle:'React + Nginx · ×3', properties:{replicas:3,image:'registry.local/frontend:v2.3.0',cpuRequest:'100m',cpuLimit:'500m',memoryRequest:'128Mi',memoryLimit:'512Mi'}}),
+        node('Service','backend-service',480,500,{id:'backend-service', parentId:'ns-app', width:150, height:72, subtitle:'ClusterIP · 80 → 8000', properties:{serviceType:'ClusterIP',port:80,targetPort:8000,protocol:'TCP'}}),
+        node('FastAPI','FastAPI Deployment',660,500,{id:'fastapi', parentId:'ns-app', width:150, height:104, subtitle:'API · :8000', properties:{replicas:3,image:'registry.local/backend:v2.3.0',port:8000,cpuRequest:'250m',cpuLimit:'1',memoryRequest:'256Mi',memoryLimit:'1Gi'}}),
+        node('CloudNativePG Operator','CloudNativePG',1080,260,{id:'pg-operator', parentId:'ns-data', width:145, height:72, subtitle:'Operator · CRD reconcile'}),
+        node('Redis','Redis Cache',900,260,{id:'redis', parentId:'ns-data', width:145, height:72, subtitle:'Cache · :6379', properties:{port:6379,version:'7.4'}}),
+        node('Service','PostgreSQL RW',900,360,{id:'pg-rw', parentId:'ns-data', width:145, height:72, subtitle:'RW Service · :5432', properties:{serviceType:'ClusterIP',port:5432,targetPort:5432}}),
+        node('Service','PostgreSQL RO',1080,360,{id:'pg-ro', parentId:'ns-data', width:145, height:72, subtitle:'RO Service · :5432', properties:{serviceType:'ClusterIP',port:5432,targetPort:5432}}),
+        node('PostgreSQL','PostgreSQL Primary',900,460,{id:'pg-primary', parentId:'ns-data', width:145, height:76, subtitle:'Primary · PVC 100Gi', properties:{role:'Primary',port:5432,pvc:'100Gi',version:'16'}}),
+        node('PostgreSQL','Standby 1',1080,460,{id:'pg-standby-1', parentId:'ns-data', width:145, height:76, subtitle:'Standby · PVC 100Gi', properties:{role:'Standby',port:5432,pvc:'100Gi',version:'16'}}),
+        node('PostgreSQL','Standby 2',900,570,{id:'pg-standby-2', parentId:'ns-data', width:145, height:76, subtitle:'Standby · PVC 100Gi', properties:{role:'Standby',port:5432,pvc:'100Gi',version:'16'}}),
+        node('MinIO','MinIO',1080,570,{id:'minio', parentId:'ns-data', width:145, height:76, subtitle:'Distributed · PVC', properties:{port:9000,pvc:'500Gi',version:'請指定版本'}}),
+        node('Prometheus','Prometheus',235,710,{id:'prometheus', parentId:'ns-observe', width:120, height:64, subtitle:'Metrics · 15d'}),
+        node('Grafana','Grafana',375,710,{id:'grafana', parentId:'ns-observe', width:120, height:64, subtitle:'Dashboards · Alerts'}),
+        node('ArgoCD','ArgoCD',580,710,{id:'argocd', parentId:'ns-gitops', width:170, height:64, subtitle:'Sync · Drift detection'})
+      );
+      doc.edges.push(
+        edge('internet','ingress-controller','HTTPS :443'), edge('ingress-controller','ingress','IngressClass'),
+        edge('ingress','frontend-service','/'), edge('frontend-service','frontend','HTTP :8080'),
+        edge('ingress','backend-service','/api'), edge('backend-service','fastapi','HTTP :8000'),
+        edge('fastapi','redis','Redis :6379',{type:'database'}), edge('fastapi','pg-rw','SQL :5432',{type:'database'}),
+        edge('pg-operator','pg-primary','Reconcile',{type:'management',dashed:true}), edge('pg-rw','pg-primary','Primary endpoint',{type:'database'}), edge('pg-ro','pg-standby-1','Read replicas',{type:'database'}), edge('pg-primary','pg-standby-1','WAL',{type:'replication',dashed:true,animated:true}),
+        edge('pg-primary','pg-standby-2','WAL',{type:'replication',dashed:true,animated:true}), edge('fastapi','minio','S3 API',{type:'storage'}),
+        edge('prometheus','fastapi','Scrape /metrics',{type:'monitoring',directed:false,dashed:true}), edge('grafana','prometheus','PromQL',{type:'monitoring'}),
+        edge('gitlab','gitlab-ci','Pipeline',{type:'cicd'}), edge('gitlab-ci','registry','Push image',{type:'cicd'}),
+        edge('gitlab-ci','gitops-repo','Update digest',{type:'cicd'}), edge('gitops-repo','argocd','Watch Git',{type:'cicd'}),
+        edge('argocd','cluster-prod','Sync desired state',{type:'management'}), edge('cluster-prod','registry','Pull image',{type:'cicd'})
+      );
+      doc.viewport={x:24,y:16,scale:.6};
+      return this.finalize(doc);
+    }
+
+    simpleFrontend() {
+      const d=this.base('React + Nginx Frontend'); const items=[node('Internet','Internet',160,180,{id:'a'}),node('Ingress','Ingress',430,180,{id:'b',subtitle:'TLS · /'}),node('Service','frontend-service',700,180,{id:'c',subtitle:'ClusterIP :80'}),node('Deployment','Frontend Deployment',970,180,{id:'d',width:220,subtitle:'Nginx + React · Replicas: 3',properties:{replicas:3,image:'frontend:v1.0.0'}})]; d.nodes.push(...items); d.edges.push(edge('a','b','HTTPS'),edge('b','c','/'),edge('c','d','HTTP :8080')); return this.finalize(d);
+    }
+    fastApi() {
+      const d=this.base('FastAPI Backend'); d.nodes.push(node('Ingress','Ingress /api',180,160,{id:'a'}),node('Service','backend-service',470,160,{id:'b'}),node('FastAPI','FastAPI Deployment',760,160,{id:'c',subtitle:'Replicas: 3',properties:{replicas:3,port:8000}}),node('PostgreSQL','PostgreSQL',1050,160,{id:'d',subtitle:'Primary · :5432'})); d.edges.push(edge('a','b','/api'),edge('b','c','HTTP :8000'),edge('c','d','SQL :5432',{type:'database'})); return this.finalize(d);
+    }
+    fullStack() {
+      const d=this.base('Full Stack'); d.nodes.push(node('Internet','Internet',100,280,{id:'a'}),node('Ingress','Ingress',350,280,{id:'b'}),node('Service','frontend-service',620,140,{id:'c'}),node('Deployment','React + Nginx',900,140,{id:'d'}),node('Service','backend-service',620,420,{id:'e'}),node('FastAPI','FastAPI ×3',900,420,{id:'f',properties:{replicas:3}}),node('PostgreSQL','PostgreSQL',1180,420,{id:'g'})); d.edges.push(edge('a','b','HTTPS'),edge('b','c','/'),edge('c','d','HTTP'),edge('b','e','/api'),edge('e','f','HTTP :8000'),edge('f','g','SQL :5432',{type:'database'})); return this.finalize(d);
+    }
+    postgresHa() {
+      const d=this.base('PostgreSQL HA'); d.groups.push(group('Database Group','PostgreSQL Cluster',370,130,900,650,{id:'cluster'})); d.nodes.push(node('CloudNativePG Operator','CloudNativePG Operator',100,180,{id:'op'}),node('Service','RW Service',410,190,{id:'rw',parentId:'cluster'}),node('Service','RO Service',410,390,{id:'ro',parentId:'cluster'}),node('PostgreSQL','Primary',660,190,{id:'p',parentId:'cluster',subtitle:'Primary · :5432'}),node('PostgreSQL','Standby 1',920,190,{id:'s1',parentId:'cluster',subtitle:'Standby · :5432'}),node('PostgreSQL','Standby 2',920,430,{id:'s2',parentId:'cluster',subtitle:'Standby · :5432'}),node('PersistentVolumeClaim','Primary PVC',660,330,{id:'pvcp',parentId:'cluster',subtitle:'100Gi',properties:{database:'postgresql'}}),node('PersistentVolumeClaim','Standby 1 PVC',920,330,{id:'pvcs1',parentId:'cluster',subtitle:'100Gi',properties:{database:'postgresql'}}),node('PersistentVolumeClaim','Standby 2 PVC',920,570,{id:'pvcs2',parentId:'cluster',subtitle:'100Gi',properties:{database:'postgresql'}})); d.edges.push(edge('op','p','Reconcile',{type:'management',dashed:true}),edge('rw','p','Write',{type:'database'}),edge('ro','s1','Read',{type:'database'}),edge('ro','s2','Read',{type:'database'}),edge('p','s1','WAL',{type:'replication',dashed:true,animated:true}),edge('p','s2','WAL',{type:'replication',dashed:true,animated:true}),edge('p','pvcp','PVC',{type:'storage'}),edge('s1','pvcs1','PVC',{type:'storage'}),edge('s2','pvcs2','PVC',{type:'storage'})); return this.finalize(d);
+    }
+    backendRedis() {
+      const d=this.base('Backend + Redis'); d.nodes.push(node('Client','Client',120,260,{id:'a'}),node('FastAPI','FastAPI',400,260,{id:'b'}),node('Redis','Redis',700,150,{id:'c',subtitle:'Cache :6379'}),node('PostgreSQL','PostgreSQL',700,380,{id:'d'})); d.edges.push(edge('a','b','REST API'),edge('b','c','Cache',{type:'database'}),edge('b','d','Cache Miss · SQL',{type:'database',dashed:true})); return this.finalize(d);
+    }
+    queueWorker() {
+      const d=this.base('Queue / Worker'); d.groups.push(group('Application Group','Worker Deployment',800,120,500,430,{id:'workers',subtitle:'Replicas: 3'}));d.nodes.push(node('React','Frontend',80,250,{id:'a'}),node('FastAPI','FastAPI',310,250,{id:'b'}),node('RabbitMQ','RabbitMQ',550,250,{id:'c'}),node('Worker','Worker 1',840,180,{id:'w1',parentId:'workers'}),node('Worker','Worker 2',1060,180,{id:'w2',parentId:'workers'}),node('Worker','Worker 3',950,360,{id:'w3',parentId:'workers'}),node('PostgreSQL','PostgreSQL',1360,180,{id:'p'}),node('MinIO','MinIO',1360,410,{id:'m'})); d.edges.push(edge('a','b','HTTPS'),edge('b','c','Publish'),edge('c','w1','Consume',{type:'traffic',animated:true}),edge('c','w2','Consume',{type:'traffic',animated:true}),edge('c','w3','Consume',{type:'traffic',animated:true}),edge('w1','p','SQL',{type:'database'}),edge('w2','p','SQL',{type:'database'}),edge('w3','m','Object Storage',{type:'storage'})); return this.finalize(d);
+    }
+    aiArchitecture() {
+      const d=this.base('AI Architecture'); d.groups.push(group('Node Pool','GPU Node Pool',790,120,540,380,{id:'gpu'})); d.nodes.push(node('React','Frontend',90,260,{id:'a'}),node('FastAPI','FastAPI',330,260,{id:'b'}),node('Service','AI Service',570,260,{id:'c'}),node('vLLM','vLLM Deployment',840,190,{id:'d',parentId:'gpu'}),node('GPU Pod','GPU Pod',1080,300,{id:'e',parentId:'gpu'}),node('PostgreSQL','PostgreSQL',330,450,{id:'p'}),node('Redis','Redis',570,450,{id:'r'})); d.edges.push(edge('a','b','REST API'),edge('b','c','Inference'),edge('c','d','gRPC'),edge('d','e','GPU schedule',{type:'management'}),edge('b','p','SQL',{type:'database'}),edge('b','r','Cache',{type:'database'})); return this.finalize(d);
+    }
+    observability() {
+      const d=this.base('Observability'); d.nodes.push(node('Pod','Application Pods',100,150,{id:'pods'}),node('Prometheus','Prometheus',380,150,{id:'prom'}),node('Grafana','Grafana',660,150,{id:'graf'}),node('Fluent Bit','Fluent Bit',380,350,{id:'fb'}),node('Loki','Loki',660,350,{id:'loki'}),node('FastAPI','FastAPI',100,550,{id:'api'}),node('OpenTelemetry','OpenTelemetry',380,550,{id:'otel'}),node('Tempo','Tempo / Jaeger',660,550,{id:'tempo'})); d.edges.push(edge('prom','pods','Scrape',{type:'monitoring',directed:false,dashed:true}),edge('graf','prom','Query',{type:'monitoring'}),edge('pods','fb','Logs',{type:'logging'}),edge('fb','loki','Push',{type:'logging'}),edge('loki','graf','Query',{type:'logging'}),edge('api','otel','Traces',{type:'monitoring'}),edge('otel','tempo','OTLP',{type:'monitoring'})); return this.finalize(d);
+    }
+    cicd() {
+      const d=this.base('CI/CD'); const names=[['Developer','Developer'],['GitLab','GitLab'],['GitLab CI','GitLab CI'],['Test','Test'],['Docker Build','Docker Build'],['Container Registry','Registry'],['Kubernetes','Kubernetes'],['Deployment','Deployment']]; names.forEach(([type,name],i)=>d.nodes.push(node(type,name,90+i*220,220,{id:`n${i}`}))); for(let i=0;i<names.length-1;i++) d.edges.push(edge(`n${i}`,`n${i+1}`,i===4?'Push image':i===5?'Pull image':'' ,{type:'cicd'})); return this.finalize(d);
+    }
+    gitops() {
+      const d=this.base('GitOps'); const names=[['Developer','Developer'],['Git','Git'],['GitLab CI','GitLab CI'],['Container Registry','Registry'],['GitOps Repository','GitOps Repository'],['ArgoCD','ArgoCD'],['Cluster','Kubernetes Cluster']]; names.forEach(([type,name],i)=>d.nodes.push(node(type,name,100+i*240,240,{id:`n${i}`}))); d.edges.push(edge('n0','n1','Commit',{type:'cicd'}),edge('n1','n2','Pipeline',{type:'cicd'}),edge('n2','n3','Push image',{type:'cicd'}),edge('n2','n4','Update digest',{type:'cicd'}),edge('n4','n5','Watch Git',{type:'cicd'}),edge('n5','n6','Sync',{type:'management'}),edge('n6','n3','Pull image',{type:'cicd'})); return this.finalize(d);
+    }
+  }
+
+  class NodeManager {
+    constructor(state, selection) { this.state = state; this.selection = selection; }
+    add(type, x, y, parentId = null) {
+      const info = componentInfo(type);
+      const created = node(type, type, x, y, {parentId, category:info.category, color:TYPE_COLORS[info.category]});
+      if (type === 'Deployment') { created.subtitle = 'Replicas: 3'; created.properties.replicas = 3; }
+      if (['Service','ClusterIP','NodePort','LoadBalancer'].includes(type)) { const serviceType=type==='Service'?'ClusterIP':type;created.subtitle = `${serviceType} · :80`; Object.assign(created.properties,{serviceType,port:80,targetPort:8080,protocol:'TCP'}); }
+      if (type === 'Ingress Controller') { created.subtitle='Replicas: 3 · HTTPS';Object.assign(created.properties,{replicas:3,port:443,protocol:'HTTPS',image:'ingress-controller:<pinned-tag>'}); }
+      if (['FastAPI','Flask','Django','Spring Boot','Node.js','REST API','gRPC Service','Model Server','Inference Service'].includes(type)) Object.assign(created.properties,{port:type==='gRPC Service'?50051:8000,protocol:type==='gRPC Service'?'gRPC':'HTTP'});
+      if (type === 'HPA') Object.assign(created.properties,{minReplicas:1,maxReplicas:10,metricTarget:'CPU 70%'});
+      if (type === 'VPA') Object.assign(created.properties,{minReplicas:1,maxReplicas:10,metricTarget:'CPU / Memory',updateMode:'Auto'});
+      if (type === 'PostgreSQL') { created.subtitle = 'Primary · :5432'; Object.assign(created.properties,{role:'Primary',port:5432,pvc:'100Gi'}); }
+      if (type === 'Redis') { created.subtitle = 'Cache · :6379'; created.properties.port = 6379; }
+      this.state.commit(`Add ${type}`, doc => doc.nodes.push(created));
+      this.selection.single(created.id, 'node');
+      return created;
+    }
+    remove(ids) {
+      const set = new Set(ids); if (!set.size) return;
+      const descendants = this.collectDescendants(set);
+      descendants.forEach(id => set.add(id));
+      this.state.commit(`Delete ${set.size} item${set.size === 1 ? '' : 's'}`, doc => {
+        doc.nodes = doc.nodes.filter(item => !set.has(item.id));
+        doc.groups = doc.groups.filter(item => !set.has(item.id));
+        doc.edges = doc.edges.filter(item => !set.has(item.id) && !set.has(item.source) && !set.has(item.target));
+      });
+      this.selection.clear();
+    }
+    collectDescendants(ids) {
+      const output = new Set(); let changed = true;
+      while (changed) { changed = false; [...this.state.state.nodes, ...this.state.state.groups].forEach(item => { if (item.parentId && (ids.has(item.parentId) || output.has(item.parentId)) && !output.has(item.id)) { output.add(item.id); changed = true; } }); }
+      return output;
+    }
+    duplicate(ids, offset = 30) {
+      const selected = new Set(ids); this.collectDescendants(selected).forEach(id => selected.add(id));
+      const map = new Map(); [...selected].forEach(id => map.set(id, uid(this.state.state.groups.some(g => g.id === id) ? 'group' : 'node')));
+      const newNodes = this.state.state.nodes.filter(n => selected.has(n.id)).map(n => ({...deepClone(n),id:map.get(n.id),name:`${n.name} Copy`,x:n.x+offset,y:n.y+offset,parentId:map.get(n.parentId)||n.parentId}));
+      const newGroups = this.state.state.groups.filter(g => selected.has(g.id)).map(g => ({...deepClone(g),id:map.get(g.id),name:`${g.name} Copy`,x:g.x+offset,y:g.y+offset,parentId:map.get(g.parentId)||g.parentId}));
+      const newEdges = this.state.state.edges.filter(e => selected.has(e.source) && selected.has(e.target)).map(e => ({...deepClone(e),id:uid('edge'),source:map.get(e.source),target:map.get(e.target)}));
+      if (!newNodes.length && !newGroups.length) return;
+      this.state.commit('Duplicate', doc => { doc.nodes.push(...newNodes); doc.groups.push(...newGroups); doc.edges.push(...newEdges); });
+      this.selection.set([...newGroups,...newNodes].map(item=>item.id));
+    }
+    reorder(ids, direction) {
+      const targets = [...this.state.state.nodes,...this.state.state.groups].filter(item => ids.includes(item.id)); if (!targets.length) return;
+      const values = [...this.state.state.nodes,...this.state.state.groups].map(item => item.z || 0);
+      const z = direction === 'front' ? Math.max(...values,0)+1 : Math.min(...values,0)-1;
+      this.state.commit(direction === 'front' ? 'Bring Forward' : 'Send Backward', () => targets.forEach(item => item.z = z));
+    }
+  }
+
+  class GroupManager {
+    constructor(state, selection) { this.state = state; this.selection = selection; }
+    add(type, x, y, parentId = null) {
+      const created = group(type, type, x, y, type === 'Namespace' ? 580 : 660, type === 'Namespace' ? 380 : 460, {parentId});
+      this.state.commit(`Add ${type}`, doc => doc.groups.push(created)); this.selection.single(created.id,'group'); return created;
+    }
+    descendants(groupId) {
+      const result = []; const queue = [groupId];
+      while (queue.length) { const parent = queue.shift(); [...this.state.state.groups,...this.state.state.nodes].forEach(item => { if (item.parentId === parent) { result.push(item); if (this.state.state.groups.some(g=>g.id===item.id)) queue.push(item.id); } }); }
+      return result;
+    }
+    canParent(itemId, groupId) {
+      if (!groupId || itemId === groupId) return false;
+      if (!this.state.state.groups.some(g=>g.id===groupId)) return false;
+      let cursor = this.state.state.groups.find(g=>g.id===groupId);
+      while (cursor) { if (cursor.id === itemId) return false; cursor = this.state.state.groups.find(g=>g.id===cursor.parentId); }
+      return true;
+    }
+    reparent(itemId, groupId) {
+      const item = this.state.nodeOrGroup(itemId); if (!item || item.parentId === groupId || (groupId && !this.canParent(itemId,groupId))) return false;
+      this.state.commit('Move to Container', () => {item.parentId=groupId||null;if(!groupId)return;const target=this.state.state.groups.find(group=>group.id===groupId);target.width=Math.max(target.width,item.width+56);target.height=Math.max(target.height,item.height+90);const nextX=clamp(item.x,target.x+28,target.x+target.width-item.width-28),nextY=clamp(item.y,target.y+58,target.y+target.height-item.height-28),dx=nextX-item.x,dy=nextY-item.y;item.x=nextX;item.y=nextY;if(this.state.state.groups.some(group=>group.id===item.id))this.descendants(item.id).forEach(child=>{child.x+=dx;child.y+=dy;});}); return true;
+    }
+    minimumSize(groupItem) {
+      const children = [...this.state.state.nodes,...this.state.state.groups].filter(item=>item.parentId===groupItem.id);
+      if (!children.length) return {width:180,height:90};
+      return {width:Math.max(180,Math.max(...children.map(c=>c.x+c.width))-groupItem.x+24),height:Math.max(90,Math.max(...children.map(c=>c.y+c.height))-groupItem.y+24)};
+    }
+  }
+
+  class EdgeManager {
+    constructor(state, selection) { this.state=state; this.selection=selection; }
+    connect(source,target,options={}) {
+      if (!source || !target || source === target || !this.state.nodeOrGroup(source) || !this.state.nodeOrGroup(target)) return null;
+      const created=edge(source,target,options.label||'',options); this.state.commit('Connect Nodes',doc=>doc.edges.push(created)); this.selection.single(created.id,'edge'); return created;
+    }
+  }
+
+  class OrthogonalRouter {
+    constructor(state) { this.state=state; }
+    isVisible(item){let parent=item.parentId;while(parent){const group=this.state.state.groups.find(candidate=>candidate.id===parent);if(!group)return true;if(group.collapsed)return false;parent=group.parentId;}return true;}
+    box(item) { return {x:item.x,y:item.y,width:item.width,height:item.collapsed?44:item.height}; }
+    center(item) { const box=this.box(item);return {x:box.x+box.width/2,y:box.y+box.height/2}; }
+    portAnchor(box,port){return({left:{x:box.x,y:box.y+box.height/2},right:{x:box.x+box.width,y:box.y+box.height/2},top:{x:box.x+box.width/2,y:box.y},bottom:{x:box.x+box.width/2,y:box.y+box.height}})[port]||null;}
+    portStub(anchor,port,distance=18){return({left:{x:anchor.x-distance,y:anchor.y},right:{x:anchor.x+distance,y:anchor.y},top:{x:anchor.x,y:anchor.y-distance},bottom:{x:anchor.x,y:anchor.y+distance}})[port]||anchor;}
+    anchors(source,target,sourcePort='auto',targetPort='auto') {
+      const sb=this.box(source),tb=this.box(target),a=this.center(source),b=this.center(target),dx=b.x-a.x,dy=b.y-a.y;
+      const explicitSource=this.portAnchor(sb,sourcePort),explicitTarget=this.portAnchor(tb,targetPort);let automatic;
+      if (Math.abs(dx) >= Math.abs(dy)) automatic=dx >= 0 ? [{x:sb.x+sb.width,y:a.y},{x:tb.x,y:b.y}] : [{x:sb.x,y:a.y},{x:tb.x+tb.width,y:b.y}];
+      else automatic=dy >= 0 ? [{x:a.x,y:sb.y+sb.height},{x:b.x,y:tb.y}] : [{x:a.x,y:sb.y},{x:b.x,y:tb.y+tb.height}];
+      return [explicitSource||automatic[0],explicitTarget||automatic[1]];
+    }
+    segmentHits(a,b,rect) { const left=rect.x-14,right=rect.x+rect.width+14,top=rect.y-14,bottom=rect.y+rect.height+14;if(a.x===b.x)return a.x>left&&a.x<right&&Math.max(a.y,b.y)>top&&Math.min(a.y,b.y)<bottom;if(a.y===b.y)return a.y>top&&a.y<bottom&&Math.max(a.x,b.x)>left&&Math.min(a.x,b.x)<right;return true; }
+    compact(points){return points.filter((point,index,array)=>index===0||point.x!==array[index-1].x||point.y!==array[index-1].y).filter((point,index,array)=>{if(!index||index===array.length-1)return true;const prev=array[index-1],next=array[index+1];return !((prev.x===point.x&&point.x===next.x)||(prev.y===point.y&&point.y===next.y));});}
+    score(points,obstacles){let length=0,hits=0;for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i];length+=Math.abs(b.x-a.x)+Math.abs(b.y-a.y);for(const obstacle of obstacles)if(this.segmentHits(a,b,obstacle))hits++;}return hits*100000+length+(points.length-2)*8;}
+    path(source,target,sourcePort='auto',targetPort='auto') {
+      if (!source || !target) return {d:'',label:{x:0,y:0}};
+      const [a,b]=this.anchors(source,target,sourcePort,targetPort),sourceExplicit=Boolean(this.portAnchor(this.box(source),sourcePort)),targetExplicit=Boolean(this.portAnchor(this.box(target),targetPort)),start=sourceExplicit?this.portStub(a,sourcePort):a,end=targetExplicit?this.portStub(b,targetPort):b;
+      const obstacles=this.state.state.nodes.filter(item=>(item.id!==source.id&&item.id!==target.id||(sourceExplicit&&item.id===source.id)||(targetExplicit&&item.id===target.id))&&this.isVisible(item)).map(item=>this.box(item)),xs=new Set([(start.x+end.x)/2]),ys=new Set([(start.y+end.y)/2]);
+      obstacles.forEach(rect=>{xs.add(rect.x-18);xs.add(rect.x+rect.width+18);ys.add(rect.y-18);ys.add(rect.y+rect.height+18);});
+      const candidates=[[start,{x:end.x,y:start.y},end],[start,{x:start.x,y:end.y},end]];xs.forEach(x=>candidates.push([start,{x,y:start.y},{x,y:end.y},end]));ys.forEach(y=>candidates.push([start,{x:start.x,y},{x:end.x,y},end]));
+      const core=candidates.map(candidate=>{const compact=this.compact(candidate);return{points:compact,score:this.score(compact,obstacles)};}).sort((one,two)=>one.score-two.score)[0].points,points=this.compact([a,...core,b]);let longest={length:-1,point:a};for(let i=1;i<points.length;i++){const p=points[i-1],q=points[i],length=Math.abs(q.x-p.x)+Math.abs(q.y-p.y);if(length>longest.length)longest={length,point:{x:(p.x+q.x)/2,y:(p.y+q.y)/2}};}
+      return {d:points.map((p,i)=>`${i?'L':'M'} ${p.x} ${p.y}`).join(' '),label:longest.point};
+    }
+  }
+
+  class AutoLayoutManager {
+    constructor(state) { this.state=state; }
+    layout(direction='TB') {
+      const nodes=this.state.state.nodes; if (!nodes.length) return;
+      this.state.commit('Auto Layout',doc=>{
+        doc.settings.layoutDirection=direction;
+        const parents=[...doc.groups.map(g=>g.id),null].sort((a,b)=>this.parentDepth(doc,b)-this.parentDepth(doc,a));
+        parents.forEach(parentId=>this.layoutNodes(doc,parentId,direction));
+        parents.forEach(parentId=>this.layoutChildGroups(doc,parentId,direction));
+      });
+    }
+    parentDepth(doc,parentId){if(parentId===null)return-1;return this.depth(doc,doc.groups.find(g=>g.id===parentId));}
+    depth(doc,item){let d=0,c=item;while(c?.parentId){d++;c=doc.groups.find(g=>g.id===c.parentId)}return d;}
+    layoutNodes(doc,parentId,direction){
+      const items=doc.nodes.filter(nodeItem=>nodeItem.parentId===parentId);if(!items.length)return;
+      const ids=new Set(items.map(item=>item.id)),incoming=new Map(items.map(item=>[item.id,0])),outgoing=new Map(items.map(item=>[item.id,[]]));
+      doc.edges.forEach(link=>{if(ids.has(link.source)&&ids.has(link.target)){incoming.set(link.target,incoming.get(link.target)+1);outgoing.get(link.source).push(link.target);}});
+      const queue=items.filter(item=>incoming.get(item.id)===0).map(item=>item.id),rank=new Map(queue.map(id=>[id,0]));
+      while(queue.length){const id=queue.shift();outgoing.get(id).forEach(target=>{rank.set(target,Math.max(rank.get(target)||0,(rank.get(id)||0)+1));incoming.set(target,incoming.get(target)-1);if(incoming.get(target)===0)queue.push(target);});}
+      let fallback=Math.max(0,...rank.values())+1;items.forEach(item=>{if(!rank.has(item.id))rank.set(item.id,fallback++);});
+      const parent=doc.groups.find(g=>g.id===parentId),startX=parent?parent.x+28:90,startY=parent?parent.y+58:90,layers=new Map();
+      items.forEach(item=>{const level=rank.get(item.id);if(!layers.has(level))layers.set(level,[]);layers.get(level).push(item);});
+      let primary=direction==='LR'?startX:startY;
+      [...layers.entries()].sort((a,b)=>a[0]-b[0]).forEach(([,layer])=>{
+        let cross=direction==='LR'?startY:startX,layerExtent=0;
+        layer.forEach(item=>{if(direction==='LR'){item.x=primary;item.y=cross;cross+=item.height+36;layerExtent=Math.max(layerExtent,item.width);}else{item.x=cross;item.y=primary;cross+=item.width+36;layerExtent=Math.max(layerExtent,item.height);}});
+        primary+=layerExtent+45;
+      });
+    }
+    moveGroup(doc,groupItem,x,y){const dx=x-groupItem.x,dy=y-groupItem.y;if(!dx&&!dy)return;const queue=[groupItem.id];groupItem.x=x;groupItem.y=y;while(queue.length){const parent=queue.shift();[...doc.nodes,...doc.groups].forEach(item=>{if(item.parentId===parent){item.x+=dx;item.y+=dy;if(doc.groups.some(g=>g.id===item.id))queue.push(item.id);}});}}
+    layoutChildGroups(doc,parentId,direction){
+      const children=doc.groups.filter(g=>g.parentId===parentId).sort((a,b)=>(a.z||0)-(b.z||0));const parent=doc.groups.find(g=>g.id===parentId),directNodes=doc.nodes.filter(n=>n.parentId===parentId);if(children.length){let startX=parent?parent.x+28:90,startY=parent?parent.y+58:90;if(directNodes.length){if(direction==='TB')startY=Math.max(...directNodes.map(n=>n.y+n.height))+45;else startX=Math.max(...directNodes.map(n=>n.x+n.width))+45;}const lanes=Math.max(1,Math.ceil(Math.sqrt(children.length)));let cursorX=startX,cursorY=startY,lineMax=0;children.forEach((child,index)=>{this.moveGroup(doc,child,cursorX,cursorY);if(direction==='TB'){lineMax=Math.max(lineMax,child.height);cursorX+=child.width+28;if((index+1)%lanes===0){cursorX=startX;cursorY+=lineMax+28;lineMax=0;}}else{lineMax=Math.max(lineMax,child.width);cursorY+=child.height+28;if((index+1)%lanes===0){cursorY=startY;cursorX+=lineMax+28;lineMax=0;}}});}
+      if(parent){const all=[...doc.nodes,...doc.groups].filter(item=>item.parentId===parent.id);if(all.length){parent.width=Math.max(220,Math.max(...all.map(item=>item.x+item.width))-parent.x+28);parent.height=Math.max(120,Math.max(...all.map(item=>item.y+(item.collapsed?44:item.height)))-parent.y+28);}}
+    }
+  }
+
+  class PersistenceManager {
+    constructor(state, ui) { this.state=state; this.ui=ui; }
+    load() {
+      try { const raw=localStorage.getItem(STORAGE_KEY); return raw ? DocumentCodec.normalize(JSON.parse(raw)) : null; }
+      catch(error) { setTimeout(()=>this.ui?.toast('本機存檔損壞或無法讀取，已載入內建範例。','error'),0); return null; }
+    }
+    save(silent=false) {
+      try { localStorage.setItem(STORAGE_KEY,JSON.stringify(this.state.state)); if(!silent)this.ui.toast('架構已儲存至此瀏覽器。'); return true; }
+      catch(error) { if(!silent)this.ui.toast('瀏覽器不允許本機儲存，請改用匯出 JSON。','error'); return false; }
+    }
+  }
+
+  class ExportManager {
+    constructor(state, renderer, ui) { this.state=state; this.renderer=renderer; this.ui=ui; }
+    jsonText() { return JSON.stringify(this.state.state,null,2); }
+    download(content,name,type) { const blob=content instanceof Blob?content:new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000); }
+    exportJSON(){this.download(this.jsonText(),`${fileSafeName(this.state.state.meta.name)}.json`,'application/json');this.ui.toast('JSON 已匯出。');}
+    async copyJSON(){await this.copyText(this.jsonText());this.ui.toast('JSON 已複製到剪貼簿。');}
+    async copyText(text){try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(text);return;}}catch(e){} const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();const ok=document.execCommand('copy');ta.remove();if(!ok)throw new Error('copy failed');}
+    bounds(){const items=[...this.state.state.groups.filter(g=>this.renderer.isVisible(g)).map(g=>({...g,height:g.collapsed?44:g.height})),...this.state.state.nodes.filter(n=>this.renderer.isVisible(n))];if(!items.length)return{x:0,y:-44,width:800,height:544};const minX=Math.min(...items.map(i=>i.x))-30,minY=Math.min(...items.map(i=>i.y))-66,maxX=Math.max(...items.map(i=>i.x+i.width))+30,maxY=Math.max(...items.map(i=>i.y+i.height))+30;return{x:minX,y:minY,width:Math.max(100,maxX-minX),height:Math.max(100,maxY-minY)};}
+    svgString(){
+      const b=this.bounds(),defs=document.querySelector('#canvas defs').innerHTML,meta=this.state.state.meta;const clone=document.getElementById('world').cloneNode(true);clone.querySelector('#overlayLayer')?.remove();clone.querySelectorAll('.port,.resize-handle,.selection-box,.guide,.edge-hit,[data-action="collapse"]').forEach(el=>el.remove());clone.querySelectorAll('.selected,.search-match,.search-dim').forEach(el=>el.classList.remove('selected','search-match','search-dim'));const css=`.node-card{fill:#fff;stroke:#c7d2df;stroke-width:1.2}.node-icon-bg{fill:var(--node-color,#326ce5)}.node-title{fill:#1d293b;font:700 12px system-ui}.node-type{fill:#758095;font:680 8.5px system-ui;letter-spacing:.06em}.node-subtitle{fill:#526176;font:9.5px system-ui}.node-detail{fill:#718096;font:8px system-ui}.node-status{stroke:#fff;stroke-width:1.5}.group-shape{fill:#eef5ff;fill-opacity:.78;stroke:#9bbcf1;stroke-width:1.5}.group-header{fill:#e0edff}.group-title{fill:#244e99;font:730 12px system-ui}.group-subtitle{fill:#6682ae;font:9px system-ui}.edge-path{fill:none;stroke:#61718a;stroke-width:2}.edge-path.dashed{stroke-dasharray:7 5}.edge-label-bg{fill:#fff;stroke:#d6deea}.edge-label{fill:#445167;font:650 10px system-ui;text-anchor:middle;dominant-baseline:middle}`;const badgeWidth=Math.max(76,meta.environment.length*8+22),banner=`<g font-family="system-ui,-apple-system,sans-serif"><text x="${b.x+12}" y="${b.y+25}" fill="#172033" font-size="16" font-weight="700">${escapeHtml(meta.name)}</text><text x="${b.x+12}" y="${b.y+43}" fill="#687386" font-size="9">${escapeHtml(meta.architectureVersion)} · ${escapeHtml(meta.owner)}</text><rect x="${b.x+b.width-badgeWidth-12}" y="${b.y+12}" width="${badgeWidth}" height="25" rx="12.5" fill="#edf8f2" stroke="#9fcdb3"/><text x="${b.x+b.width-badgeWidth/2-12}" y="${b.y+28.5}" fill="#17633f" font-size="10" font-weight="700" text-anchor="middle">${escapeHtml(meta.environment)}</text></g>`;return `<svg xmlns="${NS}" viewBox="${b.x} ${b.y} ${b.width} ${b.height}" width="${Math.ceil(b.width)}" height="${Math.ceil(b.height)}"><defs>${defs}<style>${css}</style></defs><rect x="${b.x}" y="${b.y}" width="${b.width}" height="${b.height}" fill="#f8fafc"/>${banner}${clone.outerHTML}</svg>`;
+    }
+    exportSVG(){this.download(this.svgString(),`${fileSafeName(this.state.state.meta.name)}.svg`,'image/svg+xml');this.ui.toast('SVG 已匯出。');}
+    exportPNG(){
+      const svg=this.svgString(),blob=new Blob([svg],{type:'image/svg+xml'}),url=URL.createObjectURL(blob),img=new Image();img.onload=()=>{try{const b=this.bounds(),scale=Math.min(2,6000/Math.max(b.width,b.height),Math.sqrt(16000000/(b.width*b.height))),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(b.width*scale));canvas.height=Math.max(1,Math.round(b.height*scale));const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas unavailable');ctx.fillStyle='#f8fafc';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);URL.revokeObjectURL(url);canvas.toBlob(png=>{if(!png){this.ui.toast('PNG 產生失敗。','error');return;}this.download(png,`${fileSafeName(this.state.state.meta.name)}.png`,'image/png');this.ui.toast('PNG 已匯出。');},'image/png');}catch(error){URL.revokeObjectURL(url);this.ui.toast('PNG 太大或瀏覽器無法建立影像。','error');}};img.onerror=()=>{URL.revokeObjectURL(url);this.ui.toast('PNG 產生失敗。','error');};img.src=url;
+    }
+  }
+
+  class SVGRenderer {
+    constructor(state, selection, router, bus) {
+      this.state=state; this.selection=selection; this.router=router; this.bus=bus;
+      this.svg=document.getElementById('canvas'); this.viewport=document.getElementById('viewport'); this.world=document.getElementById('world');
+      this.groupLayer=document.getElementById('groupLayer'); this.edgeLayer=document.getElementById('edgeLayer'); this.nodeLayer=document.getElementById('nodeLayer'); this.overlayLayer=document.getElementById('overlayLayer');
+      this.minimap=document.getElementById('minimap'); this.searchTerm=''; this.guideIds=new Set(); this.marquee=null; this.connectionPreview=null; this.guides=[];
+      bus.on('document:preview',detail=>detail?.viewport?this.renderViewport():this.render()); bus.on('document:committed',()=>this.render()); bus.on('document:loaded',()=>this.render()); bus.on('selection:changed',()=>this.render());
+    }
+    isVisible(item) {
+      let parent=item.parentId;
+      while(parent){const g=this.state.state.groups.find(group=>group.id===parent);if(!g)return true;if(g.collapsed)return false;parent=g.parentId;}return true;
+    }
+    render() {
+      this.renderViewport();
+      const doc=this.state.state;
+      this.groupLayer.replaceChildren(); this.edgeLayer.replaceChildren(); this.nodeLayer.replaceChildren(); this.overlayLayer.replaceChildren();
+      doc.groups.slice().sort((a,b)=>(a.z||0)-(b.z||0)).forEach(groupItem=>{if(this.isVisible(groupItem))this.groupLayer.appendChild(this.renderGroup(groupItem));});
+      doc.edges.slice().sort((a,b)=>(a.z||0)-(b.z||0)).forEach(edgeItem=>{const el=this.renderEdge(edgeItem);if(el)this.edgeLayer.appendChild(el);});
+      doc.nodes.slice().sort((a,b)=>(a.z||0)-(b.z||0)).forEach(nodeItem=>{if(this.isVisible(nodeItem))this.nodeLayer.appendChild(this.renderNode(nodeItem));});
+      this.renderOverlay();
+    }
+    renderViewport() {
+      const doc=this.state.state, view=doc.viewport;
+      this.viewport.setAttribute('transform',`translate(${view.x} ${view.y}) scale(${view.scale})`);
+      const gridSize=doc.settings.gridSize,minor=document.getElementById('minorGrid'),major=document.getElementById('majorGrid'),majorSize=gridSize*5;minor.setAttribute('width',gridSize);minor.setAttribute('height',gridSize);minor.querySelector('path').setAttribute('d',`M ${gridSize} 0 L 0 0 0 ${gridSize}`);major.setAttribute('width',majorSize);major.setAttribute('height',majorSize);major.setAttribute('patternTransform',`translate(${view.x} ${view.y}) scale(${view.scale})`);major.querySelector('rect').setAttribute('width',majorSize);major.querySelector('rect').setAttribute('height',majorSize);major.querySelector('path').setAttribute('d',`M ${majorSize} 0 L 0 0 0 ${majorSize}`);
+      document.getElementById('gridRect').style.display=doc.settings.showGrid?'':'none';
+      this.updateChrome(); this.renderMinimap();
+    }
+    matches(item) { if(!this.searchTerm)return false; const q=this.searchTerm.toLowerCase(),source=item.source?this.state.nodeOrGroup(item.source):null,target=item.target?this.state.nodeOrGroup(item.target):null; return [item.name,item.type,item.subtitle,item.description,item.label,source?.name,target?.name,JSON.stringify(item.properties||{})].some(value=>String(value||'').toLowerCase().includes(q)); }
+    classes(item,base) { const list=[base];if(this.selection.has(item.id))list.push('selected');if(this.searchTerm){list.push(this.matches(item)?'search-match':'search-dim');}if(this.guideIds.has(item.id))list.push('search-match');return list.join(' '); }
+    renderGroup(item) {
+      const h=item.collapsed?44:item.height,g=svgEl('g',{class:`${this.classes(item,'group')}${item.collapsed?' collapsed':''}`,transform:`translate(${item.x} ${item.y})`,'data-id':item.id,'data-kind':'group'});
+      g.append(svgEl('rect',{class:'group-shape',x:0,y:0,width:item.width,height:h,rx:9,'data-id':item.id,'data-kind':'group'}));
+      g.append(svgEl('path',{class:'group-header',d:`M0 9 Q0 0 9 0 H${item.width-9} Q${item.width} 0 ${item.width} 9 V38 H0 Z`,style:`fill:${item.color || '#326ce5'}18`}));
+      g.append(svgEl('text',{class:'group-title',x:14,y:23},item.name));
+      g.append(svgEl('text',{class:'group-subtitle',x:Math.min(item.width-85,Math.max(110,item.name.length*8+24)),y:23},item.type));
+      const collapse=svgEl('g',{'data-action':'collapse','data-id':item.id,transform:`translate(${item.width-29} 9)`,style:'cursor:pointer'});collapse.append(svgEl('rect',{x:0,y:0,width:20,height:20,rx:4,fill:'rgba(255,255,255,.72)',stroke:'#a8bfdf'}));collapse.append(svgEl('text',{x:10,y:14,'text-anchor':'middle',fill:'#3f659e','font-size':13},item.collapsed?'＋':'−'));g.append(collapse);
+      if(this.selection.has(item.id)&&!item.collapsed)g.append(svgEl('rect',{class:'resize-handle','data-resize':item.id,'data-id':item.id,'data-kind':'group',x:item.width-6,y:item.height-6,width:12,height:12,rx:2}));
+      return g;
+    }
+    edgeColor(type){return ({traffic:'#58708e',database:'#795aa6',replication:'#b36c20',backup:'#7c6c91',monitoring:'#27836a',logging:'#526c85',storage:'#3c7d9f',cicd:'#506b9b',management:'#6b7280'})[type]||'#58708e';}
+    renderEdge(item) {
+      const source=this.state.nodeOrGroup(item.source),target=this.state.nodeOrGroup(item.target);if(!source||!target||!this.isVisible(source)||!this.isVisible(target))return null;
+      const route=this.router.path(source,target,item.sourcePort,item.targetPort),g=svgEl('g',{class:this.classes(item,'edge'),'data-id':item.id,'data-kind':'edge'}),color=this.edgeColor(item.type);
+      g.append(svgEl('path',{class:'edge-hit',d:route.d,'data-id':item.id,'data-kind':'edge'}));
+      const path=svgEl('path',{class:`edge-path${item.dashed?' dashed':''}${item.animated?' animated':''}`,d:route.d,style:`stroke:${color};opacity:${item.type==='backup'?'.72':'1'}`});
+      if(item.directed)path.setAttribute('marker-end',`url(#arrow-${['traffic','database','replication','backup','monitoring','logging','storage','cicd','management'].includes(item.type)?item.type:'traffic'})`);g.append(path);
+      if(item.label){const width=clamp(item.label.length*6.1+14,34,160);g.append(svgEl('rect',{class:'edge-label-bg',x:route.label.x-width/2,y:route.label.y-10,width,height:20,rx:4}));g.append(svgEl('text',{class:'edge-label',x:route.label.x,y:route.label.y+.5},item.label.length>25?item.label.slice(0,24)+'…':item.label));}
+      return g;
+    }
+    nodeSubtitle(item){
+      const p=item.properties||{};
+      if(item.subtitle)return item.subtitle;
+      if(['Deployment','StatefulSet','DaemonSet','ReplicaSet','FastAPI','Ingress Controller'].includes(item.type)&&p.replicas)return `Replicas: ${p.replicas}${p.port?` · :${p.port}`:''}`;
+      if(['Service','ClusterIP','NodePort','LoadBalancer'].includes(item.type)&&p.port)return `${p.serviceType||item.type||'ClusterIP'} · ${p.port}${p.targetPort?` → ${p.targetPort}`:''}`;
+      if(item.type==='PostgreSQL')return `${p.role||'Primary'} · :${p.port||5432}${p.pvc?` · PVC ${p.pvc}`:''}`;
+      if(item.type==='Redis'&&p.port)return `Cache · :${p.port}`;
+      return item.subtitle||item.description||'';
+    }
+    nodeDetail(item){const p=item.properties||{};if(['Deployment','StatefulSet','DaemonSet','ReplicaSet','FastAPI','Ingress Controller'].includes(item.type)&&(p.replicas||p.port))return `Replicas ${p.replicas||'—'}${p.port?` · :${p.port}`:''}${p.cpuRequest?` · CPU ${p.cpuRequest}→${p.cpuLimit||'—'}`:''}`;if(['Service','ClusterIP','NodePort','LoadBalancer'].includes(item.type)&&p.port)return `${p.serviceType||item.type} ${p.port}${p.targetPort?`→${p.targetPort}`:''}`;if(item.type==='PostgreSQL')return `${p.role||'Primary'} :${p.port||5432}${p.pvc?` · PVC ${p.pvc}`:''}`;if(p.cpuRequest||p.cpuLimit||p.memoryRequest||p.memoryLimit)return `CPU ${p.cpuRequest||'—'}→${p.cpuLimit||'—'} · MEM ${p.memoryRequest||'—'}→${p.memoryLimit||'—'}`;if(p.version)return `Version: ${p.version}`;return '';}
+    nodeDetail2(item){const p=item.properties||{};if(p.image)return `Image: ${p.image}`;if(p.memoryRequest||p.memoryLimit)return `Memory ${p.memoryRequest||'—'}→${p.memoryLimit||'—'}`;return '';}
+    nodeTooltip(item){const p=item.properties||{},lines=[item.type,item.name,item.subtitle,item.description];if(p.replicas!==undefined)lines.push(`Replicas: ${p.replicas}`);if(p.image)lines.push(`Image: ${p.image}`);if(p.port)lines.push(`Port: ${p.port}${p.targetPort?` → ${p.targetPort}`:''}`);if(p.cpuRequest||p.cpuLimit)lines.push(`CPU: ${p.cpuRequest||'—'} → ${p.cpuLimit||'—'}`);if(p.memoryRequest||p.memoryLimit)lines.push(`Memory: ${p.memoryRequest||'—'} → ${p.memoryLimit||'—'}`);if(p.pvc)lines.push(`PVC: ${p.pvc}`);return lines.filter(Boolean).join('\n');}
+    iconShape(item){const known=COMPONENTS.find(component=>component.type===item.icon),category=known?.category||item.category||componentInfo(item.type).category,g=svgEl('g',{class:'node-icon-glyph',transform:`translate(7.5 ${item.height/2-10})`});let shapes=[];if(['workload','autoscaling','operator'].includes(category))shapes=[['path',{d:'M14 1 L23 6 V16 L14 21 L5 16 V6 Z'}],['path',{d:'M10 8 H18 M10 12 H18 M10 16 H15'}]];else if(category==='networking')shapes=[['circle',{cx:6,cy:10,r:3}],['circle',{cx:22,cy:4,r:3}],['circle',{cx:22,cy:16,r:3}],['path',{d:'M9 9 L19 5 M9 11 L19 15'}]];else if(category==='database')shapes=[['ellipse',{cx:14,cy:5,rx:9,ry:3}],['path',{d:'M5 5 V16 C5 20 23 20 23 16 V5 M5 11 C5 15 23 15 23 11'}]];else if(category==='storage')shapes=[['path',{d:'M5 5 L14 1 L23 5 V16 L14 20 L5 16 Z M5 5 L14 9 L23 5 M14 9 V20'}]];else if(category==='observability')shapes=[['circle',{cx:14,cy:11,r:9}],['circle',{cx:14,cy:11,r:3}],['path',{d:'M14 2 V6 M23 11 H19 M14 20 V16 M5 11 H9'}]];else if(category==='devops')shapes=[['circle',{cx:7,cy:4,r:3}],['circle',{cx:21,cy:6,r:3}],['circle',{cx:13,cy:18,r:3}],['path',{d:'M10 5 L18 6 M8 7 L12 15 M20 9 L15 16'}]];else if(category==='ai')shapes=[['circle',{cx:6,cy:5,r:2.5}],['circle',{cx:22,cy:5,r:2.5}],['circle',{cx:14,cy:11,r:2.5}],['circle',{cx:6,cy:18,r:2.5}],['circle',{cx:22,cy:18,r:2.5}],['path',{d:'M8 6 L12 10 M20 6 L16 10 M12 13 L8 17 M16 13 L20 17'}]];else if(category==='security')shapes=[['path',{d:'M14 1 L23 5 V11 C23 17 19 20 14 22 C9 20 5 17 5 11 V5 Z'}],['path',{d:'M10 11 L13 14 L19 8'}]];else if(category==='configuration')shapes=[['path',{d:'M5 5 H23 M5 11 H23 M5 17 H23'}],['circle',{cx:10,cy:5,r:2.5}],['circle',{cx:18,cy:11,r:2.5}],['circle',{cx:12,cy:17,r:2.5}]];else shapes=[['rect',{x:5,y:3,width:18,height:16,rx:3}],['path',{d:'M9 8 H19 M9 12 H16'}]];shapes.forEach(([name,attrs])=>g.append(svgEl(name,attrs)));return g;}
+    renderNode(item) {
+      const g=svgEl('g',{class:this.classes(item,'node'),transform:`translate(${item.x} ${item.y})`,'data-id':item.id,'data-kind':'node',style:`--node-color:${item.color||'#326ce5'}`});
+      g.append(svgEl('title',{},this.nodeTooltip(item)));
+      g.append(svgEl('rect',{class:'node-card',x:0,y:0,width:item.width,height:item.height,rx:8,filter:'url(#softShadow)','data-id':item.id,'data-kind':'node'}));
+      g.append(svgEl('path',{class:'node-icon-bg',d:`M8 0 H43 V${item.height} H8 Q0 ${item.height} 0 ${item.height-8} V8 Q0 0 8 0 Z`}));
+      const icon=this.iconShape(item);Object.entries({fill:'none',stroke:'#fff','stroke-width':'1.8','stroke-linecap':'round','stroke-linejoin':'round','pointer-events':'none'}).forEach(([key,value])=>icon.setAttribute(key,value));g.append(icon);
+      g.append(svgEl('text',{class:'node-type',x:55,y:18},item.type.toUpperCase().slice(0,26)));
+      const maxChars=Math.max(8,Math.floor((item.width-65)/7));g.append(svgEl('text',{class:'node-title',x:55,y:36},item.name.length>maxChars?item.name.slice(0,maxChars-1)+'…':item.name));
+      const subtitle=this.nodeSubtitle(item),subMax=Math.max(10,Math.floor((item.width-65)/5.6));if(subtitle)g.append(svgEl('text',{class:'node-subtitle',x:55,y:52},subtitle.length>subMax?subtitle.slice(0,subMax-1)+'…':subtitle));const detail=item.subtitle?this.nodeDetail(item):'',detail2=this.nodeDetail2(item),detailMax=Math.max(10,Math.floor((item.width-65)/5)),detailY=item.height>=80?70:item.height-6;if(detail&&item.height>=70)g.append(svgEl('text',{class:'node-detail',x:55,y:detailY},detail.length>detailMax?detail.slice(0,detailMax-1)+'…':detail));if(detail2&&item.height>=94)g.append(svgEl('text',{class:'node-detail',x:55,y:86},detail2.length>detailMax?detail2.slice(0,detailMax-1)+'…':detail2));
+      const statusColor=item.status==='Error'?'#d64545':item.status==='Warning'?'#d78a1d':item.status==='Disabled'?'#8b95a4':'#2aa66a';g.append(svgEl('circle',{class:'node-status',cx:item.width-11,cy:11,r:4.5,fill:statusColor}));
+      const ports=[['left',0,item.height/2],['right',item.width,item.height/2],['top',item.width/2,0],['bottom',item.width/2,item.height]];ports.forEach(([port,cx,cy])=>g.append(svgEl('circle',{class:'port','data-port':port,'data-id':item.id,cx,cy,r:5})));
+      if(this.selection.has(item.id))g.append(svgEl('rect',{class:'resize-handle','data-resize':item.id,'data-id':item.id,'data-kind':'node',x:item.width-6,y:item.height-6,width:12,height:12,rx:2}));return g;
+    }
+    renderOverlay(){
+      if(this.marquee){const {x,y,width,height}=this.marquee;this.overlayLayer.append(svgEl('rect',{class:'selection-box',x,y,width,height}));}
+      this.guides.forEach(guide=>this.overlayLayer.append(svgEl('line',{class:'guide',x1:guide.x1,y1:guide.y1,x2:guide.x2,y2:guide.y2})));
+      if(this.connectionPreview){const {source,sourcePort,point}=this.connectionPreview,s=this.state.nodeOrGroup(source);if(s){const a=this.router.portAnchor(this.router.box(s),sourcePort)||{x:s.x+s.width,y:s.y+s.height/2},mx=(a.x+point.x)/2;this.overlayLayer.append(svgEl('path',{class:'edge-path dashed',d:`M ${a.x} ${a.y} L ${mx} ${a.y} L ${mx} ${point.y} L ${point.x} ${point.y}`,style:'stroke:#326ce5'}));}}
+    }
+    updateChrome(){const doc=this.state.state,grid=document.getElementById('gridBtn'),snapButton=document.getElementById('snapBtn');document.getElementById('zoomReadout').textContent=`${Math.round(doc.viewport.scale*100)}%`;document.getElementById('canvasStats').textContent=`${doc.nodes.length} nodes · ${doc.edges.length} connections`;document.getElementById('canvasEnv').textContent=doc.meta.environment;document.getElementById('canvasEnv').className=`badge env-${doc.meta.environment.toLowerCase()}`;document.getElementById('statusSnap').textContent=doc.settings.snapToGrid?`Snap ${doc.settings.gridSize}px`:'Snap off';grid.classList.toggle('active',doc.settings.showGrid);grid.setAttribute('aria-pressed',doc.settings.showGrid);snapButton.classList.toggle('active',doc.settings.snapToGrid);snapButton.setAttribute('aria-pressed',doc.settings.snapToGrid);document.getElementById('layoutDirection').value=doc.settings.layoutDirection;}
+    contentBounds(){const items=[...this.state.state.groups.filter(group=>this.isVisible(group)).map(group=>({...group,height:group.collapsed?44:group.height})),...this.state.state.nodes.filter(nodeItem=>this.isVisible(nodeItem))];if(!items.length)return{x:0,y:0,width:800,height:500};const x=Math.min(...items.map(i=>i.x)),y=Math.min(...items.map(i=>i.y)),r=Math.max(...items.map(i=>i.x+i.width)),b=Math.max(...items.map(i=>i.y+i.height));return{x,y,width:Math.max(1,r-x),height:Math.max(1,b-y)};}
+    renderMinimap(){
+      const b=this.contentBounds(),pad=30,viewBox={x:b.x-pad,y:b.y-pad,width:b.width+pad*2,height:b.height+pad*2};this.minimap.setAttribute('viewBox',`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);this.minimap.replaceChildren();this.minimap.append(svgEl('rect',{x:viewBox.x,y:viewBox.y,width:viewBox.width,height:viewBox.height,fill:'#f7f9fc'}));this.state.state.groups.filter(g=>this.isVisible(g)).forEach(g=>this.minimap.append(svgEl('rect',{x:g.x,y:g.y,width:g.width,height:g.collapsed?44:g.height,rx:8,fill:'#e4efff',stroke:'#8facd6','stroke-width':Math.max(2,viewBox.width/400)})));this.state.state.nodes.filter(n=>this.isVisible(n)).forEach(n=>this.minimap.append(svgEl('rect',{x:n.x,y:n.y,width:n.width,height:n.height,rx:4,fill:n.color||'#326ce5',opacity:.75})));const rect=this.svg.getBoundingClientRect(),v=this.state.state.viewport;const worldX=-v.x/v.scale,worldY=-v.y/v.scale,worldW=rect.width/v.scale,worldH=rect.height/v.scale;this.minimap.append(svgEl('rect',{x:worldX,y:worldY,width:worldW,height:worldH,fill:'rgba(50,108,229,.06)',stroke:'#326ce5','stroke-width':Math.max(2,viewBox.width/450),'vector-effect':'non-scaling-stroke'}));
+    }
+  }
+
+  class CanvasManager {
+    constructor(state, renderer, bus) { this.state=state;this.renderer=renderer;this.bus=bus;this.svg=renderer.svg; }
+    screenToWorld(clientX,clientY){const rect=this.svg.getBoundingClientRect(),v=this.state.state.viewport;return{x:(clientX-rect.left-v.x)/v.scale,y:(clientY-rect.top-v.y)/v.scale};}
+    worldToScreen(x,y){const rect=this.svg.getBoundingClientRect(),v=this.state.state.viewport;return{x:rect.left+v.x+x*v.scale,y:rect.top+v.y+y*v.scale};}
+    setViewport(next){Object.assign(this.state.state.viewport,next);this.bus.emit('document:preview',{viewport:true});this.bus.emit('view:changed');}
+    zoomBy(factor,clientX=null,clientY=null){const rect=this.svg.getBoundingClientRect(),v=this.state.state.viewport,old=v.scale,next=clamp(old*factor,.2,3);const sx=clientX??(rect.left+rect.width/2),sy=clientY??(rect.top+rect.height/2),wx=(sx-rect.left-v.x)/old,wy=(sy-rect.top-v.y)/old;v.scale=next;v.x=sx-rect.left-wx*next;v.y=sy-rect.top-wy*next;this.bus.emit('document:preview',{viewport:true});this.bus.emit('view:changed');}
+    reset(){this.setViewport({x:60,y:50,scale:1});}
+    fit(){const b=this.renderer.contentBounds(),rect=this.svg.getBoundingClientRect();if(!b.width||!b.height)return;const scale=clamp(Math.min((rect.width-90)/b.width,(rect.height-90)/b.height),.2,1.5);this.setViewport({scale,x:(rect.width-b.width*scale)/2-b.x*scale,y:(rect.height-b.height*scale)/2-b.y*scale});}
+    centerOn(x,y){const rect=this.svg.getBoundingClientRect(),v=this.state.state.viewport;v.x=rect.width/2-x*v.scale;v.y=rect.height/2-y*v.scale;this.bus.emit('document:preview',{viewport:true});this.bus.emit('view:changed');}
+  }
+
+  class UIManager {
+    constructor(bus, templates) {
+      this.bus=bus;this.templates=templates;this.paletteTab='kubernetes';this.quickPoint={x:0,y:0};this.quickIndex=0;this.app=null;
+      this.palette=document.getElementById('palette');this.inspector=document.getElementById('inspector');this.contextMenu=document.getElementById('contextMenu');this.quickAdd=document.getElementById('quickAdd');
+    }
+    attach(app){this.app=app;this.bindStatic();this.renderPalette();this.renderTemplates();this.renderTutorial();this.renderHelp();this.renderInspector();this.syncMeta();}
+    bindStatic(){
+      document.querySelectorAll('[data-palette-tab]').forEach(btn=>btn.addEventListener('click',()=>{this.paletteTab=btn.dataset.paletteTab;document.querySelectorAll('[data-palette-tab]').forEach(b=>b.classList.toggle('active',b===btn));this.renderPalette();}));
+      document.getElementById('paletteSearch').addEventListener('input',()=>this.renderPalette());
+      document.getElementById('templateBtn').addEventListener('click',()=>this.openModal('templateModal'));
+      document.getElementById('tutorialBtn').addEventListener('click',()=>this.openTutorial());
+      document.querySelectorAll('[data-close-modal]').forEach(btn=>btn.addEventListener('click',()=>this.closeModal(btn.dataset.closeModal)));
+      document.querySelectorAll('.modal-backdrop').forEach(backdrop=>backdrop.addEventListener('pointerdown',event=>{if(event.target===backdrop)this.closeModal(backdrop.id);}));
+      document.getElementById('quickSearch').addEventListener('input',()=>{this.quickIndex=0;this.renderQuickList();});
+      document.getElementById('quickSearch').addEventListener('keydown',event=>this.quickKeydown(event));
+      ['metaName','metaEnvironment','metaVersion','metaOwner'].forEach(id=>document.getElementById(id).addEventListener('change',()=>this.commitMeta()));
+      this.bus.on('selection:changed',()=>this.renderInspector());this.bus.on('document:loaded',()=>{this.syncMeta();this.renderInspector();this.renderTutorial();});this.bus.on('document:committed',()=>{this.syncMeta();this.renderInspector();});
+    }
+    renderPalette(){
+      const q=document.getElementById('paletteSearch').value.trim().toLowerCase(),items=COMPONENTS.filter(c=>c.library===this.paletteTab&&(!q||c.type.toLowerCase().includes(q)||c.section.toLowerCase().includes(q))),sections=new Map();items.forEach(item=>{if(!sections.has(item.section))sections.set(item.section,[]);sections.get(item.section).push(item);});this.palette.replaceChildren();
+      if(!items.length){const empty=document.createElement('div');empty.className='palette-empty';empty.textContent='找不到符合的元件';this.palette.append(empty);}else sections.forEach((sectionItems,name)=>{const details=document.createElement('details');details.className='palette-section';details.open=true;const summary=document.createElement('summary');summary.textContent=name;const list=document.createElement('div');list.className='palette-list';sectionItems.forEach(item=>list.append(this.paletteItem(item)));details.append(summary,list);this.palette.append(details);});
+      document.getElementById('paletteCount').textContent=`${items.length}`;
+    }
+    paletteItem(item){const el=document.createElement('div');el.className='palette-item';el.draggable=true;el.dataset.component=item.type;el.title=`拖曳或點擊新增 ${item.type}`;const icon=document.createElement('span');icon.className='palette-icon';icon.style.setProperty('--item-color',TYPE_COLORS[item.category]||'#326ce5');icon.textContent=iconGlyph(item.type);const label=document.createElement('span');label.textContent=item.type;el.append(icon,label);el.addEventListener('dragstart',event=>{event.dataTransfer.setData('application/x-k8s-component',item.type);event.dataTransfer.effectAllowed='copy';});el.addEventListener('click',()=>{const rect=this.app.renderer.svg.getBoundingClientRect(),point=this.app.canvas.screenToWorld(rect.left+rect.width/2,rect.top+rect.height/2);this.app.addComponent(item.type,point.x-90,point.y-45);});return el;}
+    syncMeta(){const m=this.app.state.state.meta,environment=document.getElementById('metaEnvironment');document.getElementById('metaName').value=m.name;environment.value=m.environment;environment.className=`env-select env-${m.environment.toLowerCase()}`;document.getElementById('metaVersion').value=m.architectureVersion;document.getElementById('metaOwner').value=m.owner;}
+    commitMeta(){const values={name:document.getElementById('metaName').value.trim()||'Untitled Architecture',environment:document.getElementById('metaEnvironment').value,architectureVersion:document.getElementById('metaVersion').value.trim(),owner:document.getElementById('metaOwner').value.trim()},current=this.app.state.state.meta;if(values.name===current.name&&values.environment===current.environment&&values.architectureVersion===current.architectureVersion&&values.owner===current.owner)return;this.app.state.commit('Update Architecture Information',doc=>Object.assign(doc.meta,values));}
+    renderTemplates(){const grid=document.getElementById('templateGrid');grid.replaceChildren();this.templates.templates.forEach(template=>{const btn=document.createElement('button');btn.className='template-card';const strong=document.createElement('strong');strong.textContent=template.name;const span=document.createElement('span');span.textContent=template.description;btn.append(strong,span);btn.addEventListener('click',()=>{this.app.loadTemplate(template);this.closeModal('templateModal');});grid.append(btn);});}
+    renderTutorial(stepIndex=0){
+      const guide=TUTORIALS[this.app?.state.state.settings.guideId]||GENERIC_TUTORIAL,nav=document.getElementById('tutorialNav');nav.replaceChildren();guide.steps.forEach((step,index)=>{const btn=document.createElement('button');btn.className=index===stepIndex?'active':'';btn.textContent=step.title;btn.addEventListener('click',()=>this.showTutorialStep(index));nav.append(btn);});if(this.app)this.showTutorialStep(clamp(stepIndex,0,guide.steps.length-1),false,false);
+    }
+    showTutorialStep(index,focus=true,highlight=true){
+      const guide=TUTORIALS[this.app.state.state.settings.guideId]||GENERIC_TUTORIAL,step=guide.steps[index];document.querySelectorAll('#tutorialNav button').forEach((btn,i)=>btn.classList.toggle('active',i===index));const content=document.getElementById('tutorialContent');content.innerHTML=`<h3>${escapeHtml(step.title)}</h3><p class="lead">${escapeHtml(step.lead)}</p><div class="notice"><strong>驗證重點</strong><br>${escapeHtml(step.verify)}</div><div class="code-block"><button class="copy-code">複製</button>${escapeHtml(step.commands)}</div><div class="notice warning"><strong>Production 提醒</strong><br>${escapeHtml(step.warning)}</div>${step.targets.length?'<button class="btn primary tutorial-locate">在圖面定位並查看高亮</button>':''}`;content.querySelector('.copy-code').addEventListener('click',async()=>{try{await this.app.exporter.copyText(step.commands);this.toast('指令已複製。');}catch(e){this.toast('瀏覽器不允許複製，請手動選取指令。','error');}});this.app.renderer.guideIds=highlight?new Set(step.targets):new Set();this.app.renderer.render();const locate=()=>{const target=step.targets.map(id=>this.app.state.nodeOrGroup(id)).find(Boolean);this.app.renderer.guideIds=new Set(step.targets);if(target)this.app.canvas.centerOn(target.x+target.width/2,target.y+target.height/2);};if(focus)locate();content.querySelector('.tutorial-locate')?.addEventListener('click',()=>{locate();document.getElementById('tutorialModal').classList.add('hidden');this.app.renderer.render();this.toast('已在圖面高亮此步驟的相關元件。');});
+    }
+    openTutorial(){document.getElementById('tutorialTitle').textContent=`${this.app.state.state.meta.name}｜部署教學`;this.renderTutorial(0);this.openModal('tutorialModal');this.showTutorialStep(0,false,true);}
+    openModal(id){this.hideFloating();document.getElementById(id).classList.remove('hidden');setTimeout(()=>document.querySelector(`#${id} button, #${id} input`)?.focus(),0);}
+    closeModal(id){document.getElementById(id).classList.add('hidden');if(id==='tutorialModal'){this.app.renderer.guideIds.clear();this.app.renderer.render();}}
+    renderHelp(){document.getElementById('helpContent').innerHTML=`<div class="template-grid"><div><h3>滑鼠</h3><p>拖曳節點移動；拖元件到 Canvas 新增；拖藍色連接點建立線；空白處框選；空白處雙擊快速新增；平移模式或中鍵拖曳移動畫面；滾輪縮放。</p></div><div><h3>鍵盤</h3><p><b>Delete</b> 刪除　<b>Ctrl+C / V</b> 複製貼上　<b>Ctrl+Z / Y</b> 復原重做　<b>Ctrl+D</b> 複製　<b>Ctrl+A</b> 全選　<b>Esc</b> 取消　<b>V / H / C</b> 選取／平移／連線模式。</p></div><div><h3>資料</h3><p>「儲存」寫入此瀏覽器的 Local Storage；正式保存請匯出 JSON。匯入 JSON 會完整恢復節點、群組、連線、屬性與視窗。</p></div><div><h3>容器</h3><p>把節點放入 Namespace、Cluster 或 Node Pool；移動容器時子項目會同行。按容器標題右側的 −／＋ 收合與展開。</p></div></div>`;}
+    renderInspector(){
+      const selected=[...this.app.selection.ids],count=selected.length;document.getElementById('selectionCount').textContent=count?`${count} selected`:'';
+      if(!count){this.inspector.innerHTML='<div class="inspector-empty"><div class="empty-icon">↖</div><strong>尚未選取物件</strong><br>選取節點、群組或連線以編輯屬性。</div>';return;}
+      if(count>1){this.inspector.innerHTML=`<div class="inspector-empty"><div class="empty-icon">${count}</div><strong>已選取 ${count} 個物件</strong><br>可一起移動、複製或刪除。<div class="inspector-actions"><button class="btn" data-bulk="duplicate">複製</button><button class="btn danger" data-bulk="delete">刪除</button></div></div>`;this.inspector.querySelector('[data-bulk="duplicate"]').onclick=()=>this.app.nodeManager.duplicate(selected);this.inspector.querySelector('[data-bulk="delete"]').onclick=()=>this.app.deleteSelection();return;}
+      const item=this.app.state.entity(selected[0]);if(!item){this.app.selection.clear();return;}if(this.app.state.state.edges.includes(item))this.renderEdgeInspector(item);else if(this.app.state.state.groups.includes(item))this.renderGroupInspector(item);else this.renderNodeInspector(item);
+    }
+    field(label,key,value,type='text',options=null){const id=`inspector-${String(key).replace(/[^a-zA-Z0-9_-]/g,'-')}`;let control;if(options){control=`<select id="${id}" data-field="${key}">${options.map(opt=>`<option value="${escapeHtml(opt)}"${String(opt)===String(value)?' selected':''}>${escapeHtml(opt)}</option>`).join('')}</select>`;}else if(type==='textarea'){control=`<textarea id="${id}" data-field="${key}">${escapeHtml(value)}</textarea>`;}else if(type==='checkbox'){control=`<input id="${id}" data-field="${key}" type="checkbox" ${value?'checked':''}>`;}else{control=`<input id="${id}" data-field="${key}" type="${type}" value="${escapeHtml(value)}">`;}return `<div class="field${type==='textarea'?' top':''}"><label for="${id}">${escapeHtml(label)}</label>${control}</div>`;}
+    header(item){const info=componentInfo(item.type);return `<div class="entity-summary"><span class="palette-icon" style="--item-color:${escapeHtml(item.color||TYPE_COLORS[info.category]||'#326ce5')}">${escapeHtml(iconGlyph(item.icon||item.type))}</span><div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.type)}</small></div></div>`;}
+    bindInspector(item){
+      const read=control=>control.type==='checkbox'?control.checked:control.type==='number'?Number(control.value):control.value;
+      this.inspector.querySelectorAll('[data-field]').forEach(control=>{
+        const key=control.dataset.field;
+        if(control.matches('input[type="text"],input[type="color"],textarea'))control.addEventListener('input',()=>{const value=read(control);if(key.startsWith('properties.')){item.properties=item.properties||{};item.properties[key.slice(11)]=value;}else item[key]=value;this.app.bus.emit('document:preview',{property:key});});
+        control.addEventListener('change',()=>{const value=read(control);try{if(key==='parentId'){this.app.groupManager.reparent(item.id,value||null);return;}this.app.state.commit(`Change ${key}`,()=>{if(key.startsWith('properties.')){item.properties=item.properties||{};item.properties[key.slice(11)]=value;}else if(key==='width'||key==='height'){let min=key==='width'?120:64;if(this.app.state.state.groups.includes(item)){const size=this.app.groupManager.minimumSize(item);min=size[key];}item[key]=Math.max(min,value);}else if(key==='type'&&this.app.state.state.nodes.includes(item)){const oldType=item.type,info=componentInfo(value);item.type=value;item.category=info.category;if(item.icon===oldType)item.icon=value;}else item[key]=value;});}catch(error){this.toast(`無法套用：${error.message}`,'error');this.renderInspector();}});
+      });
+      this.inspector.querySelector('[data-action="duplicate"]')?.addEventListener('click',()=>this.app.nodeManager.duplicate([item.id]));this.inspector.querySelector('[data-action="delete"]')?.addEventListener('click',()=>this.app.deleteSelection());
+    }
+    renderNodeInspector(item){
+      const types=[...new Set(COMPONENTS.map(c=>c.type))].sort(),groups=['',...this.app.state.state.groups.map(g=>g.id)],groupNames=new Map(this.app.state.state.groups.map(g=>[g.id,g.name])),p=item.properties||{},category=componentInfo(item.type).category;
+      const workload=['workload','backend','frontend','ai'].includes(category)||['Deployment','StatefulSet','DaemonSet','ReplicaSet','Job','CronJob','Pod','Ingress Controller'].includes(item.type);
+      const service=['Service','ClusterIP','NodePort','LoadBalancer'].includes(item.type),ingress=['Ingress','Ingress Controller','Gateway'].includes(item.type),apiService=['FastAPI','Flask','Django','Spring Boot','Node.js','REST API','gRPC Service','Model Server','Inference Service'].includes(item.type),autoscaling=['HPA','VPA'].includes(item.type);
+      const database=category==='database'||['PostgreSQL','MySQL','MongoDB','Redis'].includes(item.type);
+      const storage=category==='storage'||['MinIO','S3','NFS','Object Storage','File Storage'].includes(item.type);
+      let html=this.header(item)+'<form class="inspector-form"><div class="form-section">基本資料</div>'+this.field('Name','name',item.name)+this.field('Type','type',item.type,'text',types)+this.field('Subtitle','subtitle',item.subtitle)+this.field('Description','description',item.description,'textarea')+this.field('Status','status',item.status,'text',['Healthy','Warning','Error','Disabled'])+this.field('Namespace / Container','parentId',item.parentId||'','text',groups);
+      if(workload)html+=`<div class="form-section">工作負載</div>`+this.field('Replicas','properties.replicas',p.replicas||1,'number')+this.field('Image','properties.image',p.image||'')+this.field('Version','properties.version',p.version||'')+this.field('CPU Request','properties.cpuRequest',p.cpuRequest||'')+this.field('CPU Limit','properties.cpuLimit',p.cpuLimit||'')+this.field('Memory Request','properties.memoryRequest',p.memoryRequest||'')+this.field('Memory Limit','properties.memoryLimit',p.memoryLimit||'')+this.field('Node Selector','properties.nodeSelector',p.nodeSelector||'');
+      if(service)html+=`<div class="form-section">Service 網路</div>`+this.field('Service Type','properties.serviceType',p.serviceType||item.type||'ClusterIP','text',['ClusterIP','NodePort','LoadBalancer','ExternalName'])+this.field('Port','properties.port',p.port||'','number')+this.field('Target Port','properties.targetPort',p.targetPort||'','number')+this.field('Protocol','properties.protocol',p.protocol||'TCP','text',['TCP','UDP','SCTP']);
+      else if(ingress)html+=`<div class="form-section">入口網路</div>`+this.field('Port','properties.port',p.port||'','number')+this.field('Protocol','properties.protocol',p.protocol||'HTTPS','text',['HTTP','HTTPS']);
+      else if(apiService)html+=`<div class="form-section">應用網路</div>`+this.field('Port','properties.port',p.port||'','number')+this.field('Protocol','properties.protocol',p.protocol||'HTTP','text',['HTTP','HTTPS','gRPC','WebSocket']);
+      if(autoscaling)html+=`<div class="form-section">Autoscaling</div>`+this.field('Min Replicas','properties.minReplicas',p.minReplicas||1,'number')+this.field('Max Replicas','properties.maxReplicas',p.maxReplicas||10,'number')+this.field('Metric Target','properties.metricTarget',p.metricTarget||'CPU 70%')+(item.type==='VPA'?this.field('Update Mode','properties.updateMode',p.updateMode||'Auto','text',['Off','Initial','Recreate','Auto']):'');
+      if(database)html+=`<div class="form-section">資料服務</div>`+this.field('Role','properties.role',p.role||'')+this.field('Port','properties.port',p.port||'','number')+this.field('Version','properties.version',p.version||'')+this.field('PVC','properties.pvc',p.pvc||'');
+      else if(storage)html+=`<div class="form-section">儲存</div>`+this.field('Port','properties.port',p.port||'','number')+this.field('Version','properties.version',p.version||'')+this.field('PVC','properties.pvc',p.pvc||'');
+      html+=`<div class="form-section">標籤與外觀</div>`+this.field('Labels','properties.labels',p.labels||'')+this.field('Annotations','properties.annotations',p.annotations||'')+this.field('Icon','icon',item.icon)+this.field('Color','color',item.color,'color')+this.field('Layer','z',item.z,'number')+this.field('Width','width',item.width,'number')+this.field('Height','height',item.height,'number')+`<div class="inspector-actions"><button type="button" class="btn" data-action="duplicate">複製</button><button type="button" class="btn danger" data-action="delete">刪除</button></div></form>`;this.inspector.innerHTML=html;
+      const parentSelect=this.inspector.querySelector('[data-field="parentId"]');if(parentSelect){parentSelect.innerHTML='';groups.forEach(id=>{const option=document.createElement('option');option.value=id;option.textContent=id?(groupNames.get(id)||id):'— 無 —';option.selected=(item.parentId||'')===id;parentSelect.append(option);});}
+      this.bindInspector(item);
+    }
+    renderGroupInspector(item){const types=['Cluster','Namespace','Node','Node Pool','Control Plane','Application Group','Database Group'],parents=['',...this.app.state.state.groups.filter(g=>g.id!==item.id&&this.app.groupManager.canParent(item.id,g.id)).map(g=>g.id)],names=new Map(this.app.state.state.groups.map(g=>[g.id,g.name]));this.inspector.innerHTML=this.header(item)+`<form class="inspector-form"><div class="form-section">Container</div>${this.field('Name','name',item.name)}${this.field('Type','type',item.type,'text',types)}${this.field('Subtitle','subtitle',item.subtitle)}${this.field('Parent','parentId',item.parentId||'','text',parents)}${this.field('Collapsed','collapsed',item.collapsed,'checkbox')}<div class="form-section">外觀與尺寸</div>${this.field('Color','color',item.color,'color')}${this.field('Layer','z',item.z,'number')}${this.field('Width','width',item.width,'number')}${this.field('Height','height',item.height,'number')}<div class="inspector-actions"><button type="button" class="btn" data-action="duplicate">複製</button><button type="button" class="btn danger" data-action="delete">刪除</button></div></form>`;this.inspector.querySelectorAll('[data-field="parentId"] option').forEach(option=>option.textContent=option.value?(names.get(option.value)||option.value):'— 無 —');this.bindInspector(item);}
+    renderEdgeInspector(item){const types=['traffic','database','replication','backup','monitoring','logging','storage','cicd','management'],typeLabels={traffic:'Application Traffic',database:'Database Traffic',replication:'Replication',backup:'Backup',monitoring:'Monitoring',logging:'Logging',storage:'Storage',cicd:'CI/CD',management:'Management'},entities=[...this.app.state.state.nodes,...this.app.state.state.groups],entityNames=new Map(entities.map(entity=>[entity.id,entity.name]));this.inspector.innerHTML=`<div class="entity-summary"><span class="palette-icon" style="--item-color:${this.app.renderer.edgeColor(item.type)}">↗</span><div><strong>${escapeHtml(item.label||'Connection')}</strong><small>${escapeHtml(this.app.state.nodeOrGroup(item.source)?.name||item.source)} → ${escapeHtml(this.app.state.nodeOrGroup(item.target)?.name||item.target)}</small></div></div><form class="inspector-form"><div class="form-section">Connection</div>${this.field('Source','source',item.source,'text',entities.filter(e=>e.id!==item.target).map(e=>e.id))}${this.field('Target','target',item.target,'text',entities.filter(e=>e.id!==item.source).map(e=>e.id))}${this.field('Label','label',item.label)}${this.field('Type','type',item.type,'text',types)}${this.field('Directed','directed',item.directed,'checkbox')}${this.field('Dashed','dashed',item.dashed,'checkbox')}${this.field('Animated','animated',item.animated,'checkbox')}<div class="inspector-actions"><button type="button" class="btn danger" data-action="delete">刪除連線</button></div></form>`;this.inspector.querySelectorAll('[data-field="source"] option,[data-field="target"] option').forEach(option=>option.textContent=entityNames.get(option.value)||option.value);this.inspector.querySelectorAll('[data-field="type"] option').forEach(option=>option.textContent=typeLabels[option.value]||option.value);this.bindInspector(item);}
+    openQuickAdd(clientX,clientY,worldPoint){this.hideFloating();this.quickPoint=worldPoint;this.quickIndex=0;const width=270,x=clamp(clientX,8,window.innerWidth-width-8),y=clamp(clientY,8,window.innerHeight-310);this.quickAdd.style.left=`${x}px`;this.quickAdd.style.top=`${y}px`;this.quickAdd.classList.remove('hidden');const input=document.getElementById('quickSearch');input.value='';this.renderQuickList();setTimeout(()=>input.focus(),0);}
+    renderQuickList(){const q=document.getElementById('quickSearch').value.trim().toLowerCase(),items=COMPONENTS.filter(c=>!q||c.type.toLowerCase().includes(q)).slice(0,12),list=document.getElementById('quickList');list.replaceChildren();items.forEach((item,index)=>{const btn=document.createElement('button');btn.className=`quick-item${index===this.quickIndex?' active':''}`;btn.dataset.type=item.type;const icon=document.createElement('span');icon.className='palette-icon';icon.style.setProperty('--item-color',TYPE_COLORS[item.category]||'#326ce5');icon.textContent=iconGlyph(item.type);const label=document.createElement('span');label.textContent=item.type;const section=document.createElement('small');section.textContent=item.section;btn.append(icon,label,section);btn.addEventListener('click',()=>{this.app.addComponent(item.type,this.quickPoint.x-90,this.quickPoint.y-45);this.hideFloating();});list.append(btn);});}
+    quickKeydown(event){const items=[...document.querySelectorAll('#quickList .quick-item')];if(event.key==='ArrowDown'){event.preventDefault();this.quickIndex=(this.quickIndex+1)%Math.max(1,items.length);this.renderQuickList();}else if(event.key==='ArrowUp'){event.preventDefault();this.quickIndex=(this.quickIndex-1+items.length)%Math.max(1,items.length);this.renderQuickList();}else if(event.key==='Enter'){event.preventDefault();items[this.quickIndex]?.click();}else if(event.key==='Escape')this.hideFloating();}
+    showMenu(clientX,clientY,items){this.hideFloating();this.contextMenu.replaceChildren();items.forEach(item=>{if(item==='separator'){this.contextMenu.append(document.createElement('hr'));return;}const btn=document.createElement('button');btn.textContent=item.label;btn.disabled=Boolean(item.disabled);if(item.danger)btn.className='danger';btn.addEventListener('click',()=>{this.hideFloating();item.action?.();});this.contextMenu.append(btn);});this.contextMenu.style.left=`${clamp(clientX,5,window.innerWidth-195)}px`;this.contextMenu.style.top=`${clamp(clientY,5,window.innerHeight-Math.min(360,items.length*34+15))}px`;this.contextMenu.classList.remove('hidden');}
+    hideFloating(){this.contextMenu.classList.add('hidden');this.quickAdd.classList.add('hidden');}
+    toast(message,type=''){const el=document.createElement('div');el.className=`toast ${type}`;el.textContent=message;document.getElementById('toastRegion').append(el);setTimeout(()=>el.remove(),3000);document.getElementById('statusMessage').textContent=message;}
+  }
+
+  class InteractionController {
+    constructor(app) {
+      this.app=app;this.svg=app.renderer.svg;this.stage=document.getElementById('stage');this.mode='select';this.spaceDown=false;this.gesture=null;this.clipboard=null;this.connectSource=null;
+      this.bind();this.setMode('select');
+    }
+    bind(){
+      this.svg.addEventListener('pointerdown',event=>this.pointerDown(event));this.svg.addEventListener('pointermove',event=>this.pointerMove(event));this.svg.addEventListener('pointerup',event=>this.pointerUp(event));this.svg.addEventListener('pointercancel',event=>this.cancelGesture(event));
+      this.svg.addEventListener('dblclick',event=>this.doubleClick(event));this.svg.addEventListener('wheel',event=>{event.preventDefault();this.app.canvas.zoomBy(event.deltaY<0?1.12:.89,event.clientX,event.clientY);},{passive:false});this.svg.addEventListener('contextmenu',event=>this.contextMenu(event));
+      this.stage.addEventListener('dragover',event=>{event.preventDefault();event.dataTransfer.dropEffect='copy';this.stage.classList.add('drag-over');});this.stage.addEventListener('dragleave',()=>this.stage.classList.remove('drag-over'));this.stage.addEventListener('drop',event=>this.drop(event));
+      document.addEventListener('keydown',event=>this.keyDown(event));document.addEventListener('keyup',event=>{if(event.code==='Space')this.spaceDown=false;});window.addEventListener('blur',()=>{this.spaceDown=false;this.cancelGesture();});
+      document.addEventListener('pointerdown',event=>{if(!event.target.closest('#contextMenu,#quickAdd'))this.app.ui.hideFloating();});
+      this.app.renderer.minimap.addEventListener('pointerdown',event=>this.minimapNavigate(event));
+    }
+    setMode(mode){this.mode=mode;this.connectSource=null;['select','pan','connect'].forEach(name=>document.getElementById(`${name}ModeBtn`).classList.toggle('active',name===mode));this.svg.classList.toggle('pan-mode',mode==='pan');this.svg.classList.toggle('connect-mode',mode==='connect');document.getElementById('statusMode').textContent=({select:'選取模式',pan:'平移模式',connect:'連線模式'})[mode];this.app.renderer.connectionPreview=null;this.app.renderer.render();}
+    targetInfo(event){const el=event.target.closest('[data-id]');return el?{id:el.dataset.id,kind:el.dataset.kind||null,port:el.dataset.port,resize:el.dataset.resize,action:el.dataset.action}:null;}
+    pointerDown(event){
+      if(event.button!==0&&event.button!==1)return;this.app.ui.hideFloating();const info=this.targetInfo(event),point=this.app.canvas.screenToWorld(event.clientX,event.clientY);this.svg.setPointerCapture?.(event.pointerId);
+      if(info?.action==='collapse'){event.stopPropagation();const g=this.app.state.state.groups.find(group=>group.id===info.id);if(g)this.app.state.commit(g.collapsed?'Expand Group':'Collapse Group',()=>g.collapsed=!g.collapsed);return;}
+      if(info?.resize){const item=this.app.state.nodeOrGroup(info.resize);if(!item)return;this.app.selection.single(item.id,this.app.state.state.groups.includes(item)?'group':'node');this.gesture={type:'resize',pointerId:event.pointerId,start:point,itemId:item.id,initial:deepClone(item),changed:false};return;}
+      if(info?.port){this.gesture={type:'connect',pointerId:event.pointerId,source:info.id,sourcePort:info.port,start:point};this.app.renderer.connectionPreview={source:info.id,sourcePort:info.port,point};this.app.renderer.render();return;}
+      if(this.mode==='pan'||this.spaceDown||event.button===1){this.gesture={type:'pan',pointerId:event.pointerId,start:{x:event.clientX,y:event.clientY},view:{...this.app.state.state.viewport}};this.svg.classList.add('is-panning');return;}
+      if(info&&(info.kind==='node'||info.kind==='group')){
+        if(this.mode==='connect'){if(!this.connectSource){this.connectSource=info.id;this.app.selection.single(info.id,info.kind);this.app.ui.toast('請選擇連線目標。');}else if(this.connectSource!==info.id){this.app.edgeManager.connect(this.connectSource,info.id);this.connectSource=null;this.setMode('select');}return;}
+        if(event.shiftKey||event.ctrlKey)this.app.selection.toggle(info.id,info.kind);else if(!this.app.selection.has(info.id))this.app.selection.single(info.id,info.kind);
+        const roots=this.topLevelSelection(),affected=this.affectedItems(roots),initial=new Map(affected.map(item=>[item.id,{x:item.x,y:item.y}]));this.gesture={type:'move',pointerId:event.pointerId,start:point,roots,initial,changed:false};return;
+      }
+      if(info?.kind==='edge'){this.app.selection.single(info.id,'edge');return;}
+      if(this.mode==='select'){if(!event.shiftKey&&!event.ctrlKey)this.app.selection.clear();this.gesture={type:'marquee',pointerId:event.pointerId,start:point,current:point,additive:event.shiftKey||event.ctrlKey};this.app.renderer.marquee={x:point.x,y:point.y,width:0,height:0};this.app.renderer.render();}
+    }
+    topLevelSelection(){const ids=new Set(this.app.selection.ids),groups=this.app.state.state.groups;return [...ids].filter(id=>{let item=this.app.state.nodeOrGroup(id),parent=item?.parentId;while(parent){if(ids.has(parent))return false;parent=groups.find(g=>g.id===parent)?.parentId;}return item;});}
+    affectedItems(roots){const ids=new Set(roots);roots.forEach(id=>{if(this.app.state.state.groups.some(g=>g.id===id))this.app.groupManager.descendants(id).forEach(item=>ids.add(item.id));});return [...ids].map(id=>this.app.state.nodeOrGroup(id)).filter(Boolean);}
+    pointerMove(event){
+      const point=this.app.canvas.screenToWorld(event.clientX,event.clientY);document.getElementById('statusPosition').textContent=`X ${Math.round(point.x)} · Y ${Math.round(point.y)}`;const g=this.gesture;if(!g)return;
+      if(g.type==='pan'){const dx=event.clientX-g.start.x,dy=event.clientY-g.start.y;this.app.canvas.setViewport({x:g.view.x+dx,y:g.view.y+dy});return;}
+      if(g.type==='move'){let dx=point.x-g.start.x,dy=point.y-g.start.y;const primary=this.app.state.nodeOrGroup(g.roots[0]),start=g.initial.get(primary?.id);if(this.app.state.state.settings.snapToGrid&&start){dx=snap(start.x+dx,this.app.state.state.settings.gridSize)-start.x;dy=snap(start.y+dy,this.app.state.state.settings.gridSize)-start.y;}g.changed=g.changed||Math.abs(dx)>1||Math.abs(dy)>1;g.initial.forEach((position,id)=>{const item=this.app.state.nodeOrGroup(id);if(item){item.x=clamp(position.x+dx,-3000,30000);item.y=clamp(position.y+dy,-3000,30000);}});this.app.renderer.guides=this.alignmentGuides(g.roots);this.app.bus.emit('document:preview',{gesture:'move'});return;}
+      if(g.type==='resize'){const item=this.app.state.nodeOrGroup(g.itemId);if(!item)return;let width=g.initial.width+(point.x-g.start.x),height=g.initial.height+(point.y-g.start.y);if(this.app.state.state.settings.snapToGrid){width=snap(width,this.app.state.state.settings.gridSize);height=snap(height,this.app.state.state.settings.gridSize);}let min={width:120,height:64};if(this.app.state.state.groups.includes(item))min=this.app.groupManager.minimumSize(item);item.width=clamp(width,min.width,5000);item.height=clamp(height,min.height,5000);g.changed=true;this.app.bus.emit('document:preview',{gesture:'resize'});return;}
+      if(g.type==='marquee'){g.current=point;this.app.renderer.marquee={x:Math.min(g.start.x,point.x),y:Math.min(g.start.y,point.y),width:Math.abs(point.x-g.start.x),height:Math.abs(point.y-g.start.y)};this.app.renderer.render();return;}
+      if(g.type==='connect'){this.app.renderer.connectionPreview={source:g.source,sourcePort:g.sourcePort,point};this.app.renderer.render();}
+    }
+    alignmentGuides(rootIds){const first=this.app.state.nodeOrGroup(rootIds[0]);if(!first)return[];const guides=[],threshold=5,others=[...this.app.state.state.nodes,...this.app.state.state.groups].filter(i=>!rootIds.includes(i.id));for(const other of others){if(Math.abs(first.x-other.x)<threshold)guides.push({x1:other.x,y1:Math.min(first.y,other.y)-200,x2:other.x,y2:Math.max(first.y+first.height,other.y+other.height)+200});if(Math.abs(first.y-other.y)<threshold)guides.push({x1:Math.min(first.x,other.x)-200,y1:other.y,x2:Math.max(first.x+first.width,other.x+other.width)+200,y2:other.y});if(guides.length>=2)break;}return guides;}
+    pointerUp(event){
+      const g=this.gesture;if(!g)return;this.svg.releasePointerCapture?.(event.pointerId);this.svg.classList.remove('is-panning');this.gesture=null;
+      if(g.type==='move'){this.app.renderer.guides=[];if(g.changed){g.roots.forEach(id=>{const item=this.app.state.nodeOrGroup(id);if(!item)return;const candidate=this.deepestGroupAt({x:item.x+item.width/2,y:item.y+(item.collapsed?44:item.height)/2},g.roots);if(candidate&&this.app.groupManager.canParent(id,candidate.id))item.parentId=candidate.id;else if(!candidate)item.parentId=null;});this.app.state.commit('Move Selection');}else this.app.renderer.render();}
+      else if(g.type==='resize'){if(g.changed)this.app.state.commit('Resize');else this.app.renderer.render();}
+      else if(g.type==='marquee'){const box=this.app.renderer.marquee,ids=[...this.app.state.state.nodes,...this.app.state.state.groups].filter(item=>this.app.renderer.isVisible(item)&&item.x<box.x+box.width&&item.x+item.width>box.x&&item.y<box.y+box.height&&item.y+item.height>box.y).map(item=>item.id);this.app.renderer.marquee=null;if(g.additive)this.app.selection.set([...new Set([...this.app.selection.ids,...ids])]);else this.app.selection.set(ids);}
+      else if(g.type==='connect'){const hit=document.elementFromPoint(event.clientX,event.clientY),target=hit?.closest('[data-kind="node"],[data-kind="group"]')?.dataset.id,targetPort=hit?.closest('[data-port]')?.dataset.port||'auto';this.app.renderer.connectionPreview=null;if(target&&target!==g.source)this.app.edgeManager.connect(g.source,target,{sourcePort:g.sourcePort||'auto',targetPort});else this.app.renderer.render();}
+    }
+    cancelGesture(){const g=this.gesture;if(!g)return;try{if(g.pointerId!==undefined&&this.svg.hasPointerCapture?.(g.pointerId))this.svg.releasePointerCapture(g.pointerId);}catch(error){}if(g.type==='move')g.initial.forEach((pos,id)=>{const item=this.app.state.nodeOrGroup(id);if(item)Object.assign(item,pos);});if(g.type==='resize'){const item=this.app.state.nodeOrGroup(g.itemId);if(item)Object.assign(item,g.initial);}this.gesture=null;this.app.renderer.marquee=null;this.app.renderer.connectionPreview=null;this.app.renderer.guides=[];this.svg.classList.remove('is-panning');this.app.renderer.render();}
+    deepestGroupAt(point,exclude=[]){const blocked=new Set(exclude);exclude.forEach(id=>{if(this.app.state.state.groups.some(g=>g.id===id))this.app.groupManager.descendants(id).forEach(item=>blocked.add(item.id));});return this.app.state.state.groups.filter(group=>!group.collapsed&&this.app.renderer.isVisible(group)&&!blocked.has(group.id)&&point.x>=group.x&&point.x<=group.x+group.width&&point.y>=group.y&&point.y<=group.y+group.height).sort((a,b)=>(a.width*a.height)-(b.width*b.height))[0]||null;}
+    doubleClick(event){const info=this.targetInfo(event);if(info&&(info.kind==='node'||info.kind==='group')){const item=this.app.state.nodeOrGroup(info.id),name=prompt('修改名稱',item.name);if(name!==null&&name.trim()&&name.trim()!==item.name)this.app.state.commit('Rename',()=>item.name=name.trim());return;}if(!info){const point=this.app.canvas.screenToWorld(event.clientX,event.clientY);this.app.ui.openQuickAdd(event.clientX,event.clientY,point);}}
+    drop(event){event.preventDefault();this.stage.classList.remove('drag-over');const type=event.dataTransfer.getData('application/x-k8s-component');if(!type)return;const point=this.app.canvas.screenToWorld(event.clientX,event.clientY);this.app.addComponent(type,point.x-90,point.y-45);}
+    minimapNavigate(event){const point=this.svgPoint(this.app.renderer.minimap,event.clientX,event.clientY);this.app.canvas.centerOn(point.x,point.y);}
+    svgPoint(svg,clientX,clientY){const point=svg.createSVGPoint();point.x=clientX;point.y=clientY;return point.matrixTransform(svg.getScreenCTM().inverse());}
+    contextMenu(event){event.preventDefault();const info=this.targetInfo(event),items=[];if(info&&(info.kind==='node'||info.kind==='group')){if(!this.app.selection.has(info.id))this.app.selection.single(info.id,info.kind);items.push({label:'編輯名稱',action:()=>this.rename(info.id)},{label:'複製',action:()=>this.app.nodeManager.duplicate([info.id])},{label:'建立連線',action:()=>{this.setMode('connect');this.connectSource=info.id;this.app.ui.toast('請選擇連線目標。');}},'separator',{label:'移到最上層',action:()=>this.app.nodeManager.reorder([info.id],'front')},{label:'移到最下層',action:()=>this.app.nodeManager.reorder([info.id],'back')});const namespaces=this.app.state.state.groups.filter(g=>g.type==='Namespace'&&this.app.groupManager.canParent(info.id,g.id));namespaces.slice(0,5).forEach(ns=>items.push({label:`移到 Namespace: ${ns.name}`,action:()=>this.app.groupManager.reparent(info.id,ns.id)}));items.push('separator',{label:'刪除',danger:true,action:()=>this.app.deleteSelection()});}else if(info?.kind==='edge'){this.app.selection.single(info.id,'edge');items.push({label:'編輯連線',action:()=>document.querySelector('#inspector [data-field="label"]')?.focus()},{label:'刪除連線',danger:true,action:()=>this.app.deleteSelection()});}else{const point=this.app.canvas.screenToWorld(event.clientX,event.clientY);items.push({label:'新增 Node',action:()=>this.app.ui.openQuickAdd(event.clientX,event.clientY,point)},{label:'新增 Namespace',action:()=>this.app.addComponent('Namespace',point.x-290,point.y-190)},{label:'貼上',disabled:!this.clipboard,action:()=>this.paste() },'separator',{label:'適合畫面',action:()=>this.app.canvas.fit()},{label:'自動排列',action:()=>this.app.autoLayout.layout(this.app.state.state.settings.layoutDirection)});}
+      this.app.ui.showMenu(event.clientX,event.clientY,items);
+    }
+    rename(id){const item=this.app.state.nodeOrGroup(id);if(!item)return;const name=prompt('修改名稱',item.name);if(name!==null&&name.trim())this.app.state.commit('Rename',()=>item.name=name.trim());}
+    copy(){const ids=new Set(this.app.selection.ids);this.app.nodeManager.collectDescendants(ids).forEach(id=>ids.add(id));this.clipboard={ids:[...ids]};this.app.ui.toast(`已複製 ${ids.size} 個物件。`);}
+    paste(){if(!this.clipboard)return;this.app.nodeManager.duplicate(this.clipboard.ids,40);}
+    keyDown(event){
+      if(event.code==='Space'&&!isEditable(event.target)){this.spaceDown=true;event.preventDefault();}
+      if(isEditable(event.target))return;const ctrl=event.ctrlKey||event.metaKey,key=event.key.toLowerCase();
+      if(this.gesture&&(ctrl||event.key==='Delete'||event.key==='Backspace'))this.cancelGesture();
+      if(ctrl&&key==='z'){event.preventDefault();event.shiftKey?this.app.redo():this.app.undo();}
+      else if(ctrl&&key==='y'){event.preventDefault();this.app.redo();}
+      else if(ctrl&&key==='c'){event.preventDefault();this.copy();}
+      else if(ctrl&&key==='v'){event.preventDefault();this.paste();}
+      else if(ctrl&&key==='d'){event.preventDefault();this.app.nodeManager.duplicate([...this.app.selection.ids]);}
+      else if(ctrl&&key==='a'){event.preventDefault();this.app.selection.set([...this.app.state.state.groups,...this.app.state.state.nodes].filter(item=>this.app.renderer.isVisible(item)).map(item=>item.id));}
+      else if(event.key==='Delete'||event.key==='Backspace'){event.preventDefault();this.app.deleteSelection();}
+      else if(event.key==='Escape'){this.cancelGesture();this.connectSource=null;this.app.ui.hideFloating();document.querySelectorAll('.modal-backdrop:not(.hidden)').forEach(m=>this.app.ui.closeModal(m.id));this.app.selection.clear();this.setMode('select');}
+      else if(key==='v')this.setMode('select');else if(key==='h')this.setMode('pan');else if(key==='c')this.setMode('connect');
+    }
+  }
+
+  class DiagramApp {
+    constructor(){
+      this.bus=new EventBus();this.templates=new TemplateManager();this.history=new HistoryManager(this.bus);this.ui=new UIManager(this.bus,this.templates);
+      let initial=this.templates.production(),restored=false;try{const raw=localStorage.getItem(STORAGE_KEY);if(raw){initial=DocumentCodec.normalize(JSON.parse(raw));restored=true;}}catch(error){setTimeout(()=>this.ui.toast('本機存檔無法讀取，已載入完整範例。','error'),200);}
+      this.state=new StateManager(this.bus,this.history,initial);this.selection=new SelectionManager(this.bus,this.state);this.nodeManager=new NodeManager(this.state,this.selection);this.groupManager=new GroupManager(this.state,this.selection);this.edgeManager=new EdgeManager(this.state,this.selection);this.router=new OrthogonalRouter(this.state);this.renderer=new SVGRenderer(this.state,this.selection,this.router,this.bus);this.canvas=new CanvasManager(this.state,this.renderer,this.bus);this.autoLayout=new AutoLayoutManager(this.state);this.exporter=new ExportManager(this.state,this.renderer,this.ui);this.persistence=new PersistenceManager(this.state,this.ui);this.ui.attach(this);this.interactions=new InteractionController(this);this.autosave=debounce(()=>this.persistence.save(true),500);this.bindControls();if(window.innerWidth<=1040)document.getElementById('workspace').classList.add('right-collapsed');this.renderer.render();if(!restored&&window.innerWidth>=1600)requestAnimationFrame(()=>this.canvas.fit());document.getElementById('statusMessage').textContent=restored?'已恢復瀏覽器中的架構存檔':'已載入 Production Kubernetes Application';
+    }
+    bindControls(){
+      document.getElementById('selectModeBtn').onclick=()=>this.interactions.setMode('select');document.getElementById('panModeBtn').onclick=()=>this.interactions.setMode('pan');document.getElementById('connectModeBtn').onclick=()=>this.interactions.setMode('connect');
+      document.getElementById('undoBtn').onclick=()=>this.undo();document.getElementById('redoBtn').onclick=()=>this.redo();document.getElementById('deleteBtn').onclick=()=>this.deleteSelection();
+      ['zoomInBtn','stageZoomIn'].forEach(id=>document.getElementById(id).onclick=()=>this.canvas.zoomBy(1.15));['zoomOutBtn','stageZoomOut'].forEach(id=>document.getElementById(id).onclick=()=>this.canvas.zoomBy(.87));['fitBtn','stageFit'].forEach(id=>document.getElementById(id).onclick=()=>this.canvas.fit());document.getElementById('resetViewBtn').onclick=()=>this.canvas.reset();
+      document.getElementById('gridBtn').onclick=()=>{const s=this.state.state.settings;s.showGrid=!s.showGrid;document.getElementById('gridBtn').classList.toggle('active',s.showGrid);document.getElementById('gridBtn').setAttribute('aria-pressed',s.showGrid);this.bus.emit('document:preview',{});this.bus.emit('view:changed');};
+      document.getElementById('snapBtn').onclick=()=>{const s=this.state.state.settings;s.snapToGrid=!s.snapToGrid;document.getElementById('snapBtn').classList.toggle('active',s.snapToGrid);document.getElementById('snapBtn').setAttribute('aria-pressed',s.snapToGrid);this.bus.emit('document:preview',{});this.bus.emit('view:changed');};
+      document.getElementById('layoutDirection').value=this.state.state.settings.layoutDirection;document.getElementById('layoutDirection').onchange=event=>{this.state.state.settings.layoutDirection=event.target.value;this.bus.emit('view:changed');};document.getElementById('layoutBtn').onclick=()=>this.autoLayout.layout(document.getElementById('layoutDirection').value);
+      const search=document.getElementById('architectureSearch');search.oninput=()=>{this.renderer.searchTerm=search.value.trim();document.getElementById('searchClear').classList.toggle('hidden',!this.renderer.searchTerm);this.renderer.render();};document.getElementById('searchClear').onclick=()=>{search.value='';search.dispatchEvent(new Event('input'));search.focus();};
+      document.getElementById('saveBtn').onclick=()=>this.persistence.save();document.getElementById('importBtn').onclick=()=>document.getElementById('importFile').click();document.getElementById('importFile').onchange=event=>this.importFile(event.target.files[0]);
+      document.getElementById('exportBtn').onclick=event=>this.ui.showMenu(event.clientX,event.clientY,[{label:'匯出 PNG',action:()=>this.exporter.exportPNG()},{label:'匯出 SVG',action:()=>this.exporter.exportSVG()},{label:'匯出 JSON',action:()=>this.exporter.exportJSON()},{label:'複製 JSON',action:()=>this.exporter.copyJSON().catch(()=>this.ui.toast('複製失敗，請使用匯出 JSON。','error'))},'separator',{label:'操作說明',action:()=>this.ui.openModal('helpModal')}]);
+      document.getElementById('leftToggle').onclick=()=>{document.getElementById('workspace').classList.toggle('left-collapsed');setTimeout(()=>this.renderer.render(),180);};const toggleRight=()=>{document.getElementById('workspace').classList.toggle('right-collapsed');setTimeout(()=>this.renderer.render(),180);};document.getElementById('rightToggle').onclick=toggleRight;document.getElementById('stageRightToggle').onclick=toggleRight;
+      this.historyBus();this.bus.on('document:committed',()=>this.autosave());this.bus.on('document:loaded',()=>this.autosave());this.bus.on('view:changed',()=>this.autosave());window.addEventListener('resize',debounce(()=>this.renderer.render(),100));
+    }
+    historyBus(){this.bus.on('history:changed',state=>{document.getElementById('undoBtn').disabled=!state.canUndo;document.getElementById('redoBtn').disabled=!state.canRedo;});this.history.emit();}
+    addComponent(type,x,y){const point={x:clamp(x,-2500,28000),y:clamp(y,-2500,28000)},candidate=this.interactions?.deepestGroupAt({x:point.x+90,y:point.y+45},[])||null;if(GROUP_TYPES.has(type))return this.groupManager.add(type,point.x,point.y,candidate?.id||null);return this.nodeManager.add(type,point.x,point.y,candidate?.id||null);}
+    deleteSelection(){if(!this.selection.ids.size)return;this.nodeManager.remove([...this.selection.ids]);}
+    restoreHistorySnapshot(snapshot,label){const viewport=deepClone(this.state.state.viewport),prefs={showGrid:this.state.state.settings.showGrid,snapToGrid:this.state.state.settings.snapToGrid,gridSize:this.state.state.settings.gridSize,layoutDirection:this.state.state.settings.layoutDirection};snapshot.viewport=viewport;Object.assign(snapshot.settings,prefs);this.state.restore(snapshot,label);this.selection.sanitize();}
+    undo(){this.interactions.cancelGesture();const snapshot=this.history.undo();if(snapshot){this.restoreHistorySnapshot(snapshot,'Undo');this.ui.toast('已復原。');}}
+    redo(){this.interactions.cancelGesture();const snapshot=this.history.redo();if(snapshot){this.restoreHistorySnapshot(snapshot,'Redo');this.ui.toast('已重做。');}}
+    loadTemplate(template){this.state.replace(template.build(),`Load Template: ${template.name}`,true);this.selection.clear();requestAnimationFrame(()=>this.canvas.fit());this.ui.toast(`已載入 ${template.name}。`);}
+    async importFile(file){if(!file)return;try{if(file.size>5*1024*1024)throw new Error('檔案超過 5 MB 安全上限。');const raw=await file.text(),candidate=DocumentCodec.normalize(JSON.parse(raw));this.state.replace(candidate,'Import JSON',true);this.selection.clear();this.ui.toast('JSON 已完整匯入，包含原本的縮放與視窗位置。');}catch(error){this.ui.toast(`匯入失敗：${error.message}`,'error');}finally{document.getElementById('importFile').value='';}}
+  }
+
+  const app = new DiagramApp();
+  </script>
+</body>
+</html>

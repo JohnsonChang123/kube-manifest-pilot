@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="KubeManifestPilot 隱私權說明：Kubernetes YAML 在瀏覽器本機產生，不連線叢集、不收集 kubeconfig，且不將敏感資料保存到 localStorage。">
+  <meta name="theme-color" content="#0b1220">
+  <title>隱私權說明｜KubeManifestPilot</title>
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body class="site-page">
+  <a class="skip-link" href="#main-content">跳到主要內容</a>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="../" aria-label="KubeManifestPilot 首頁">
+        <span class="brand-mark" aria-hidden="true">K</span>
+        <span>KubeManifestPilot</span>
+      </a>
+      <nav class="site-nav" aria-label="主要導覽">
+        <a href="../">首頁</a>
+        <a href="../generator/">問卷產生器</a>
+        <a href="../templates/">範本</a>
+        <a href="../designer/">架構設計工具</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content" class="page-shell">
+    <section class="hero compact-hero">
+      <p class="eyebrow">Privacy &amp; Local Processing</p>
+      <h1>隱私權說明</h1>
+      <p class="hero-lead">KubeManifestPilot 的核心產生功能在你的瀏覽器內執行。本頁說明目前版本如何處理問卷內容、本機草稿、下載、剪貼簿與未來可能加入的廣告服務。</p>
+      <p class="page-meta">最後更新：2026 年 8 月 16 日</p>
+    </section>
+
+    <div class="content-layout">
+      <article class="card prose-card">
+        <section aria-labelledby="local-processing-title">
+          <h2 id="local-processing-title">1. 本機處理</h2>
+          <p>問卷規格、Kubernetes YAML 與部署教學均由瀏覽器端 JavaScript 產生。KubeManifestPilot 不會為了產生設定檔而連線你的 Kubernetes Cluster，也不會要求 kubeconfig、Cluster token 或雲端帳號憑證。</p>
+          <p>使用 GitHub Pages 瀏覽網站時，瀏覽器仍需向代管服務取得 HTML、CSS 與 JavaScript 靜態檔案；相關網路請求可能由代管服務依其政策記錄。</p>
+        </section>
+
+        <section aria-labelledby="storage-title">
+          <h2 id="storage-title">2. localStorage 與草稿</h2>
+          <p>網站可能使用 <code>localStorage</code> 在目前瀏覽器保存非敏感偏好或問卷草稿，例如介面語言、選用範本、步驟進度與一般工作負載設定。這些資料留在瀏覽器內，不會因 KubeManifestPilot 的核心功能上傳到專案伺服器。</p>
+          <p><strong>敏感值不會寫入 localStorage。</strong>Production 流程只應填寫既有 Secret 的名稱與 Key 參照，不應在問卷輸入密碼、Token、私鑰或 kubeconfig 內容。</p>
+          <p>你可以透過瀏覽器的網站資料設定刪除本網站的 localStorage。清除瀏覽資料、使用無痕模式或更換瀏覽器／裝置，也可能使草稿無法取回。</p>
+        </section>
+
+        <section aria-labelledby="files-title">
+          <h2 id="files-title">3. 下載與剪貼簿</h2>
+          <p>當你下載 YAML、問卷 JSON 或 <code>DEPLOY.md</code> 時，檔案由瀏覽器在本機建立，再交由瀏覽器的下載功能保存。KubeManifestPilot 不會替你上傳或部署這些檔案。</p>
+          <p>只有在你按下「複製」等明確操作時，網站才會嘗試將選定內容寫入系統剪貼簿。瀏覽器或作業系統可能依自身設定管理剪貼簿權限與歷史紀錄。</p>
+        </section>
+
+        <section aria-labelledby="external-title">
+          <h2 id="external-title">4. 外部連結</h2>
+          <p>網站可能提供 GitHub、文件來源或支持專案頁面的外部連結。離開 KubeManifestPilot 後，對方網站會依自己的隱私權與 Cookie 政策處理資料；本說明不涵蓋第三方網站。</p>
+        </section>
+
+        <section id="cookies" aria-labelledby="ads-title">
+          <h2 id="ads-title">5. 廣告、分析與 Cookie</h2>
+          <p><strong>目前預設版本未啟用廣告或第三方分析服務，也不載入廣告平台程式。</strong>頁面中若存在廣告保留區，它預設為停用狀態，不會因此設定廣告 Cookie。</p>
+          <p>若未來啟用廣告或分析服務，將在啟用前更新本頁，說明服務提供者、資料用途、Cookie／類似技術、保存方式與可用的控制選項；在適用地區，也會先提供必要的同意管理與拒絕選項。核心 YAML 產生功能不應因拒絕非必要 Cookie 而失效。</p>
+        </section>
+
+        <section aria-labelledby="security-title">
+          <h2 id="security-title">6. 使用者應注意的安全事項</h2>
+          <ul>
+            <li>不要把真正的 Secret 值、私鑰、Token 或 kubeconfig 貼入問卷、檔名或可公開分享的輸出。</li>
+            <li>下載後請在提交 Git 前檢查檔案，並依需要加入 <code>.gitignore</code>。</li>
+            <li>產生器規則檢查不等同安全稽核；部署前仍需檢查 RBAC、網路、映像來源與 Secret 管理方式。</li>
+          </ul>
+        </section>
+
+        <section aria-labelledby="updates-title">
+          <h2 id="updates-title">7. 政策更新與聯絡</h2>
+          <p>功能、代管方式或第三方服務變更時，本說明可能更新，並在頁面上調整最後更新日期。專案聯絡方式將透過公開的 <a href="#" data-config-link="github">GitHub repository</a> 提供；連結正式設定前，不會導向外部服務。</p>
+        </section>
+      </article>
+    </div>
+
+    <!-- 廣告保留區預設停用；此頁不載入任何廣告程式。 -->
+    <aside class="ad-placeholder" data-ad-status="disabled" hidden aria-hidden="true">
+      廣告保留區（目前未啟用）
+    </aside>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <p><strong>KubeManifestPilot</strong> — Guided Kubernetes YAML Manifest Generator</p>
+      <nav class="footer-links" aria-label="頁尾導覽">
+        <a href="../privacy/" aria-current="page">隱私權</a>
+        <a href="#cookies">Cookie 設定</a>
+        <a href="../licenses/">第三方授權</a>
+        <a href="#" data-config-link="github" aria-label="GitHub 專案連結（尚未設定）">GitHub</a>
+        <a href="#" data-config-link="support" aria-label="支持專案連結（尚未設定）">支持專案</a>
+      </nav>
+      <p class="footer-meta">核心功能在瀏覽器本機執行，不會連線或修改 Kubernetes Cluster。</p>
+    </div>
+  </footer>
+  <div class="toast-region" data-toast-region aria-live="polite"></div>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/site.js"></script>
+</body>
+</html>

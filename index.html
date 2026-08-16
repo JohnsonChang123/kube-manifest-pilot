@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KubeManifestPilot｜Kubernetes YAML 產生器與部署教學</title>
+  <meta name="description" content="透過引導式問卷產生 Kubernetes YAML Manifest、驗證提醒與逐步部署教學，不需連線 Kubernetes 叢集。">
+  <meta name="keywords" content="Kubernetes YAML generator, Kubernetes manifest generator, K8s deployment guide, Kubernetes 設定檔產生器">
+  <meta name="theme-color" content="#326ce5">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="KubeManifestPilot">
+  <meta property="og:title" content="KubeManifestPilot — Kubernetes YAML Manifest Generator">
+  <meta property="og:description" content="問卷式產生 Kubernetes YAML、驗證提醒與逐步部署教學。">
+  <meta property="og:image" content="./assets/images/kube-manifest-pilot-social-preview.jpg">
+  <link rel="stylesheet" href="./assets/css/site.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "KubeManifestPilot",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Web",
+    "description": "A browser-based Kubernetes YAML manifest generator with validation warnings and step-by-step deployment guides.",
+    "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳至主要內容</a>
+  <header class="site-header">
+    <nav class="site-nav" aria-label="主要導覽">
+      <a class="site-brand" href="./" aria-label="KubeManifestPilot 首頁">
+        <span class="brand-mark" aria-hidden="true">K</span>
+        <span>KubeManifestPilot</span>
+      </a>
+      <button class="button small nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="mainNav">選單</button>
+      <div class="nav-links" id="mainNav">
+        <a href="./" aria-current="page">首頁</a>
+        <a href="./generator/">設定檔產生器</a>
+        <a href="./templates/">部署範本</a>
+        <a href="./designer/">架構設計工具</a>
+      </div>
+      <div class="nav-actions">
+        <a class="button small secondary" href="#" data-config-link="support">支持專案</a>
+        <a class="button small primary" href="./generator/">開始產生</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="page-shell hero-grid">
+        <div>
+          <p class="eyebrow">Guided Kubernetes Manifest Generator</p>
+          <h1>用問卷產生可檢查的 <span>Kubernetes YAML</span></h1>
+          <p class="hero-copy">KubeManifestPilot 將架構選擇轉成標準化設定、Kubernetes Manifest 與逐步部署教學。所有處理都在瀏覽器完成，不需要提供 kubeconfig，也不會連線或修改你的叢集。</p>
+          <div class="hero-actions">
+            <a class="button primary" href="./generator/">建立第一份 Manifest</a>
+            <a class="button" href="./templates/">瀏覽部署範本</a>
+          </div>
+          <div class="trust-row" aria-label="產品特性">
+            <span>純瀏覽器端</span>
+            <span>GitHub Pages 可部署</span>
+            <span>不接收叢集憑證</span>
+          </div>
+        </div>
+
+        <div class="product-card" aria-label="問卷產生器介面示意">
+          <div class="product-card-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="product-card-title">KubeManifestPilot / generator</span></div>
+          <div class="product-card-body">
+            <div class="mock-steps">
+              <div class="mock-step"><b>1</b>範本與專案</div>
+              <div class="mock-step active"><b>2</b>應用元件</div>
+              <div class="mock-step"><b>3</b>資料庫</div>
+              <div class="mock-step"><b>4</b>對外方式</div>
+              <div class="mock-step"><b>5</b>檢查與產生</div>
+            </div>
+            <div class="mock-form">
+              <h3>Backend 元件</h3>
+              <p>設定容器映像、Port、資源與健康檢查。</p>
+              <div class="mock-label">Container image</div>
+              <div class="mock-input blue"></div>
+              <div class="mock-grid">
+                <div><div class="mock-label">Container port</div><div class="mock-input"></div></div>
+                <div><div class="mock-label">Replicas</div><div class="mock-input"></div></div>
+              </div>
+              <div class="mock-output">apiVersion: apps/v1<br>kind: Deployment<br>metadata:<br>&nbsp;&nbsp;name: backend</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section white" aria-labelledby="featuresTitle">
+      <div class="page-shell">
+        <div class="section-head center">
+          <p class="eyebrow">從回答到可驗證產物</p>
+          <h2 id="featuresTitle">降低 YAML 錯誤，也保留部署脈絡</h2>
+          <p>產生器不只是填欄位，而是同步檢查元件關係、列出外部前提，並依實際資源生成操作說明。</p>
+        </div>
+        <div class="grid">
+          <article class="card feature"><span class="feature-icon">01</span><h3>條件式問卷</h3><p>只顯示當前架構需要的設定，支援前端、後端與 PostgreSQL 等常用起始範本。</p></article>
+          <article class="card feature"><span class="feature-icon">02</span><h3>一致性驗證</h3><p>檢查名稱、映像版本、Port、Selector、Probe、Secret 與 Ingress 之間的關聯。</p></article>
+          <article class="card feature"><span class="feature-icon">03</span><h3>動態部署教學</h3><p>使用實際 Namespace 與 Resource 名稱，生成 dry-run、驗證、Log、Rollback 與移除指令。</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="flowTitle">
+      <div class="page-shell">
+        <div class="section-head"><p class="eyebrow">工作流程</p><h2 id="flowTitle">四個清楚的資料階段</h2></div>
+        <div class="workflow">
+          <article class="workflow-item"><b>1</b><h3>回答問卷</h3><p>選擇範本、環境與應用設定。</p></article>
+          <article class="workflow-item"><b>2</b><h3>標準化規格</h3><p>轉成可保存、可重現的 QuestionnaireSpec。</p></article>
+          <article class="workflow-item"><b>3</b><h3>產生並檢查</h3><p>由同一份規格建立 YAML 與驗證結果。</p></article>
+          <article class="workflow-item"><b>4</b><h3>下載與驗證</h3><p>依教學在自己的叢集執行 server dry-run。</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section white" aria-labelledby="templatesTitle">
+      <div class="page-shell">
+        <div class="section-head"><p class="eyebrow">起始範本</p><h2 id="templatesTitle">從最小可理解架構開始</h2><p>「單副本」代表 Workload Replica 為 1，不會將 Pod 綁定到特定 Kubernetes Node。</p></div>
+        <div class="grid">
+          <article class="card"><span class="template-tag">推薦起點</span><h3>前後端各單副本</h3><p>Frontend、Backend 各一組 Deployment 與 Service，適合學習應用服務關係。</p></article>
+          <article class="card"><span class="template-tag">資料庫</span><h3>PostgreSQL 單副本</h3><p>StatefulSet、Headless／Client Service 與持久儲存；明示不具 HA 與備份。</p></article>
+          <article class="card"><span class="template-tag">組合</span><h3>前後端＋PostgreSQL</h3><p>以 Secret reference 串接應用與資料庫，依相依順序生成部署與驗證步驟。</p></article>
+        </div>
+        <div class="hero-actions"><a class="button" href="./templates/">查看全部六種範本</a></div>
+      </div>
+    </section>
+
+    <section class="section compact">
+      <div class="page-shell">
+        <div class="boundary">
+          <div aria-hidden="true">⚠</div>
+          <div><strong>產生器驗證不等於叢集驗證</strong><p>KubeManifestPilot 不知道你的 Admission Policy、Controller、StorageClass 或 Kubernetes 版本。下載後仍須在目標叢集執行 <code>kubectl apply --dry-run=server --validate=strict</code>。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section white">
+      <div class="page-shell">
+        <div class="cta-panel">
+          <div><h2>準備建立第一份 Kubernetes Manifest？</h2><p>不需註冊、不需 kubeconfig，回答內容留在你的瀏覽器。</p></div>
+          <a class="button" href="./generator/">開啟設定檔產生器</a>
+        </div>
+        <div class="ad-placeholder" data-enabled="false" aria-hidden="true">廣告保留區</div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-main">
+      <div class="footer-brand"><strong>KubeManifestPilot</strong><p>免費、純前端的 Kubernetes YAML Manifest Generator。這是獨立社群工具，並非 Kubernetes 官方產品。</p></div>
+      <nav class="footer-links" aria-label="頁尾導覽">
+        <a href="./privacy/">隱私權</a>
+        <a href="./privacy/#cookies">Cookie 設定</a>
+        <a href="./licenses/">第三方授權</a>
+        <a href="#" data-config-link="github">GitHub</a>
+        <a href="#" data-config-link="support">支持專案</a>
+      </nav>
+    </div>
+  </footer>
+  <div class="toast-region" data-toast-region aria-live="polite"></div>
+  <script src="./assets/js/config.js"></script>
+  <script src="./assets/js/site.js"></script>
+</body>
+</html>

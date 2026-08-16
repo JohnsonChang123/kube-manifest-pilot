@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kubernetes YAML 產生器｜KubeManifestPilot</title>
+  <meta name="description" content="以五步問卷產生 Kubernetes Deployment、Service、StatefulSet、Ingress YAML 與對應部署教學。">
+  <meta name="theme-color" content="#326ce5">
+  <link rel="stylesheet" href="../assets/css/site.css">
+</head>
+<body class="generator-page">
+  <a class="skip-link" href="#generatorMain">跳至問卷</a>
+  <header class="site-header">
+    <nav class="site-nav" aria-label="主要導覽">
+      <a class="site-brand" href="../"><span class="brand-mark" aria-hidden="true">K</span><span>KubeManifestPilot</span></a>
+      <button class="button small nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="mainNav">選單</button>
+      <div class="nav-links" id="mainNav">
+        <a href="../">首頁</a>
+        <a href="./" aria-current="page">設定檔產生器</a>
+        <a href="../templates/">部署範本</a>
+        <a href="../designer/">架構設計工具</a>
+      </div>
+      <div class="nav-actions">
+        <button class="button small" type="button" id="resetDraft">重設問卷</button>
+        <a class="button small secondary" href="#" data-config-link="support">支持專案</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="generator-main" id="generatorMain">
+    <div class="generator-intro">
+      <div><h1>Kubernetes 設定檔產生器</h1><p>依序回答五個步驟。KubeManifestPilot 只進行靜態規則檢查，不會讀取 kubeconfig、連線或修改 Kubernetes 叢集。</p></div>
+      <span class="privacy-chip">本機處理 · 不上傳回答</span>
+    </div>
+
+    <form id="questionnaire" novalidate>
+      <div class="wizard-layout">
+        <nav class="wizard-steps" aria-label="問卷步驟">
+          <button class="step-button active" type="button" data-step-target="0"><span class="step-number">1</span><span>範本與專案</span></button>
+          <button class="step-button" type="button" data-step-target="1"><span class="step-number">2</span><span>應用元件</span></button>
+          <button class="step-button" type="button" data-step-target="2"><span class="step-number">3</span><span>資料庫</span></button>
+          <button class="step-button" type="button" data-step-target="3"><span class="step-number">4</span><span>對外方式</span></button>
+          <button class="step-button" type="button" data-step-target="4"><span class="step-number">5</span><span>檢查與產生</span></button>
+        </nav>
+
+        <section class="wizard-panel" aria-live="polite">
+          <div class="wizard-step" data-step="0">
+            <header class="panel-head"><h2>選擇範本與專案</h2><p>先決定應用組成，再設定可重現的 Kubernetes 名稱與環境。</p></header>
+            <div class="panel-body">
+              <div class="template-options" role="radiogroup" aria-label="部署範本">
+                <label class="template-option"><input type="radio" name="template" value="frontend-backend" checked><span class="template-option-content"><span class="recommended">推薦起點</span><strong>前後端各單副本</strong><small>兩組 Deployment／Service。單副本不代表指定特定 Node。</small></span></label>
+                <label class="template-option"><input type="radio" name="template" value="postgresql"><span class="template-option-content"><span class="recommended">資料庫入門</span><strong>PostgreSQL 單副本</strong><small>StatefulSet、Service 與 PVC；不包含 HA、備份或故障切換。</small></span></label>
+                <label class="template-option"><input type="radio" name="template" value="frontend"><span class="template-option-content"><strong>純前端</strong><small>Frontend Deployment、Service 與選配外部入口。</small></span></label>
+                <label class="template-option"><input type="radio" name="template" value="backend"><span class="template-option-content"><strong>純後端 API</strong><small>Backend Deployment、ClusterIP Service 與健康檢查。</small></span></label>
+                <label class="template-option"><input type="radio" name="template" value="fullstack-postgresql"><span class="template-option-content"><strong>前後端＋PostgreSQL</strong><small>完整三層應用，使用既有 Secret reference 串接資料庫。</small></span></label>
+                <label class="template-option"><input type="radio" name="template" value="backend-external-postgresql"><span class="template-option-content"><strong>後端＋外部 PostgreSQL</strong><small>不建立資料庫，只產生連線設定與既有 Secret 參照。</small></span></label>
+              </div>
+
+              <div class="form-section">
+                <h3>專案資訊</h3><p>名稱會用於 labels 與預設 Resource 名稱。</p>
+                <div class="form-grid">
+                  <div class="field"><label for="projectName">應用名稱</label><input id="projectName" name="projectName" value="my-app" autocomplete="off" required><p class="hint">小寫英數字與連字號，最長 63 字元。</p><span class="field-error" data-error-for="projectName"></span></div>
+                  <div class="field"><label for="namespace">Namespace</label><input id="namespace" name="namespace" value="my-app-dev" autocomplete="off" required><p class="hint">所有產生的 namespaced resources 都會明確寫入。</p><span class="field-error" data-error-for="namespace"></span></div>
+                  <div class="field"><label for="environment">環境</label><select id="environment" name="environment"><option value="DEV">DEV</option><option value="PRODUCTION">PRODUCTION</option></select><span class="field-error" data-error-for="environment"></span></div>
+                  <div class="field"><span class="label">Namespace 處理</span><label class="check-row"><input id="createNamespace" name="createNamespace" type="checkbox" checked>輸出 Namespace Manifest</label><p class="hint">使用既有 Namespace 時請取消勾選。</p></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wizard-step" data-step="1" hidden>
+            <header class="panel-head"><h2>設定應用元件</h2><p>Image、Port 與 Probe 必須符合容器實際行為；產生器不會根據映像名稱猜測。</p></header>
+            <div class="panel-body">
+              <div class="form-section component-section" data-component="frontend">
+                <h3>Frontend</h3><p>靜態網站或 Web 前端。若映像不是 Nginx，請依實際監聽 Port 調整。</p>
+                <div class="form-grid three">
+                  <div class="field"><label for="frontendName">Resource Name</label><input id="frontendName" name="frontendName" value="frontend" required><span class="field-error" data-error-for="frontendName"></span></div>
+                  <div class="field full"><label for="frontendImage">Container Image</label><input id="frontendImage" name="frontendImage" value="nginx:1.27-alpine" required><p class="hint">Production 不接受 latest 或缺少版本的 image。</p><span class="field-error" data-error-for="frontendImage"></span></div>
+                  <div class="field"><label for="frontendPort">Container Port</label><input id="frontendPort" name="frontendPort" type="number" min="1" max="65535" value="80" required><span class="field-error" data-error-for="frontendPort"></span></div>
+                  <div class="field"><label for="frontendServicePort">Service Port</label><input id="frontendServicePort" name="frontendServicePort" type="number" min="1" max="65535" value="80" required><span class="field-error" data-error-for="frontendServicePort"></span></div>
+                  <div class="field"><label for="frontendReplicas">Replicas</label><input id="frontendReplicas" name="frontendReplicas" type="number" min="1" max="100" value="1" required><span class="field-error" data-error-for="frontendReplicas"></span></div>
+                </div>
+                <details class="form-section"><summary>資源、Probe 與進階設定</summary>
+                  <div class="form-grid" style="margin-top:16px">
+                    <div class="field"><label for="frontendCpuRequest">CPU Request</label><input id="frontendCpuRequest" name="frontendCpuRequest" value="50m"></div>
+                    <div class="field"><label for="frontendCpuLimit">CPU Limit</label><input id="frontendCpuLimit" name="frontendCpuLimit" value="250m"></div>
+                    <div class="field"><label for="frontendMemoryRequest">Memory Request</label><input id="frontendMemoryRequest" name="frontendMemoryRequest" value="64Mi"></div>
+                    <div class="field"><label for="frontendMemoryLimit">Memory Limit</label><input id="frontendMemoryLimit" name="frontendMemoryLimit" value="256Mi"></div>
+                    <div class="field"><label for="frontendReadinessType">Readiness</label><select id="frontendReadinessType" name="frontendReadinessType"><option value="http">HTTP</option><option value="tcp">TCP</option><option value="none">不產生</option></select></div>
+                    <div class="field"><label for="frontendReadinessPath">Readiness Path</label><input id="frontendReadinessPath" name="frontendReadinessPath" value="/"></div>
+                    <div class="field full"><label class="check-row"><input id="frontendLiveness" name="frontendLiveness" type="checkbox">確認此端點可安全作為 Liveness Probe</label></div>
+                    <div class="field"><label for="frontendLivenessPath">Liveness Path</label><input id="frontendLivenessPath" name="frontendLivenessPath" value="/"></div>
+                    <div class="field"><label for="frontendPullSecret">既有 imagePullSecret</label><input id="frontendPullSecret" name="frontendPullSecret" placeholder="選填，不輸出密碼"></div>
+                    <div class="field full"><label class="check-row"><input id="frontendStartup" name="frontendStartup" type="checkbox">容器啟動較慢，產生 Startup Probe</label></div>
+                    <div class="field"><label for="frontendStartupType">Startup 類型</label><select id="frontendStartupType" name="frontendStartupType"><option value="tcp">TCP</option><option value="http">HTTP</option></select></div>
+                    <div class="field"><label for="frontendStartupPath">Startup Path</label><input id="frontendStartupPath" name="frontendStartupPath" value="/"><span class="field-error" data-error-for="frontendStartupPath"></span></div>
+                    <div class="field full"><label for="frontendConfig">ConfigMap 環境變數</label><textarea id="frontendConfig" name="frontendConfig" placeholder="API_BASE_URL=/api&#10;FEATURE_X=true"></textarea><p class="hint">每行 KEY=value；不要放密碼或 Token。</p></div>
+                    <div class="field full"><label for="frontendSecretEnv">既有 Secret 環境變數參照</label><textarea id="frontendSecretEnv" name="frontendSecretEnv" placeholder="SESSION_KEY=frontend-secrets:session-key"></textarea><p class="hint">每行 ENV_NAME=secret-name:key；只保存參照，不輸入 Secret 值。</p><span class="field-error" data-error-for="frontendSecretEnv"></span></div>
+                    <div class="field full"><label for="frontendCommand">Command（每行一個參數）</label><textarea id="frontendCommand" name="frontendCommand" placeholder="選填，留空沿用 image 預設"></textarea></div>
+                    <div class="field full"><label for="frontendArgs">Args（每行一個參數）</label><textarea id="frontendArgs" name="frontendArgs" placeholder="選填，留空沿用 image 預設"></textarea></div>
+                  </div>
+                </details>
+              </div>
+
+              <div class="form-section component-section" data-component="backend">
+                <h3>Backend</h3><p>API 或服務容器。預設只建立 ClusterIP，由前端或 Ingress 存取。</p>
+                <div class="form-grid three">
+                  <div class="field"><label for="backendName">Resource Name</label><input id="backendName" name="backendName" value="backend" required><span class="field-error" data-error-for="backendName"></span></div>
+                  <div class="field full"><label for="backendImage">Container Image</label><input id="backendImage" name="backendImage" value="hashicorp/http-echo:1.0" required><p class="hint">範例映像預設監聽 5678；換成自有映像時必須同步調整。</p><span class="field-error" data-error-for="backendImage"></span></div>
+                  <div class="field"><label for="backendPort">Container Port</label><input id="backendPort" name="backendPort" type="number" min="1" max="65535" value="5678" required><span class="field-error" data-error-for="backendPort"></span></div>
+                  <div class="field"><label for="backendServicePort">Service Port</label><input id="backendServicePort" name="backendServicePort" type="number" min="1" max="65535" value="80" required><span class="field-error" data-error-for="backendServicePort"></span></div>
+                  <div class="field"><label for="backendReplicas">Replicas</label><input id="backendReplicas" name="backendReplicas" type="number" min="1" max="100" value="1" required><span class="field-error" data-error-for="backendReplicas"></span></div>
+                </div>
+                <details class="form-section"><summary>資源、Probe 與進階設定</summary>
+                  <div class="form-grid" style="margin-top:16px">
+                    <div class="field"><label for="backendCpuRequest">CPU Request</label><input id="backendCpuRequest" name="backendCpuRequest" value="100m"></div>
+                    <div class="field"><label for="backendCpuLimit">CPU Limit</label><input id="backendCpuLimit" name="backendCpuLimit" value="500m"></div>
+                    <div class="field"><label for="backendMemoryRequest">Memory Request</label><input id="backendMemoryRequest" name="backendMemoryRequest" value="128Mi"></div>
+                    <div class="field"><label for="backendMemoryLimit">Memory Limit</label><input id="backendMemoryLimit" name="backendMemoryLimit" value="512Mi"></div>
+                    <div class="field"><label for="backendReadinessType">Readiness</label><select id="backendReadinessType" name="backendReadinessType"><option value="tcp">TCP</option><option value="http">HTTP</option><option value="none">不產生</option></select></div>
+                    <div class="field"><label for="backendReadinessPath">Readiness Path</label><input id="backendReadinessPath" name="backendReadinessPath" value="/healthz"></div>
+                    <div class="field full"><label class="check-row"><input id="backendLiveness" name="backendLiveness" type="checkbox">確認此端點可安全作為 Liveness Probe</label></div>
+                    <div class="field"><label for="backendLivenessPath">Liveness Path</label><input id="backendLivenessPath" name="backendLivenessPath" value="/healthz"></div>
+                    <div class="field"><label for="backendPullSecret">既有 imagePullSecret</label><input id="backendPullSecret" name="backendPullSecret" placeholder="選填，不輸出密碼"></div>
+                    <div class="field full"><label class="check-row"><input id="backendStartup" name="backendStartup" type="checkbox">容器啟動較慢，產生 Startup Probe</label></div>
+                    <div class="field"><label for="backendStartupType">Startup 類型</label><select id="backendStartupType" name="backendStartupType"><option value="tcp">TCP</option><option value="http">HTTP</option></select></div>
+                    <div class="field"><label for="backendStartupPath">Startup Path</label><input id="backendStartupPath" name="backendStartupPath" value="/healthz"><span class="field-error" data-error-for="backendStartupPath"></span></div>
+                    <div class="field full"><label for="backendConfig">ConfigMap 環境變數</label><textarea id="backendConfig" name="backendConfig" placeholder="LOG_LEVEL=info"></textarea><p class="hint">每行 KEY=value；資料庫 Secret 由下一步設定。</p></div>
+                    <div class="field full"><label for="backendSecretEnv">既有 Secret 環境變數參照</label><textarea id="backendSecretEnv" name="backendSecretEnv" placeholder="API_TOKEN=backend-secrets:api-token"></textarea><p class="hint">每行 ENV_NAME=secret-name:key；只保存參照，不輸入 Secret 值。</p><span class="field-error" data-error-for="backendSecretEnv"></span></div>
+                    <div class="field full"><label for="backendCommand">Command（每行一個參數）</label><textarea id="backendCommand" name="backendCommand" placeholder="選填，留空沿用 image 預設"></textarea></div>
+                    <div class="field full"><label for="backendArgs">Args（每行一個參數）</label><textarea id="backendArgs" name="backendArgs">-text=Hello from backend</textarea></div>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </div>
+
+          <div class="wizard-step" data-step="2" hidden>
+            <header class="panel-head"><h2>設定資料庫與儲存</h2><p>內建 PostgreSQL 使用 StatefulSet；Production 只允許引用既有 Secret，不在問卷輸入密碼。</p></header>
+            <div class="panel-body">
+              <div class="form-grid">
+                <div class="field full"><label for="databaseMode">PostgreSQL 模式</label><select id="databaseMode" name="databaseMode"><option value="none">不使用 PostgreSQL</option><option value="internal">建立內建單副本 PostgreSQL</option><option value="external">連接既有／外部 PostgreSQL</option></select></div>
+              </div>
+
+              <div class="form-section" data-database-panel="internal" hidden>
+                <h3>內建 PostgreSQL 單副本</h3><p>適合教學或受控環境，不具 HA、自動備份、PITR 或故障切換。</p>
+                <div class="notice warning">Production 使用單副本資料庫仍可能因節點、儲存或維護事件中斷；請規劃備份與還原演練。</div>
+                <div class="form-grid" style="margin-top:16px">
+                  <div class="field"><label for="databaseName">Resource Name</label><input id="databaseName" name="databaseName" value="postgresql"></div>
+                  <div class="field"><label for="databaseImage">Image</label><input id="databaseImage" name="databaseImage" value="postgres:16-alpine"></div>
+                  <div class="field"><label for="databasePort">Port</label><input id="databasePort" name="databasePort" type="number" min="1" max="65535" value="5432"></div>
+                  <div class="field"><label for="postgresDatabase">Database</label><input id="postgresDatabase" name="postgresDatabase" value="app"></div>
+                  <div class="field"><label for="postgresUser">User</label><input id="postgresUser" name="postgresUser" value="app"></div>
+                  <div class="field"><label for="pvcSize">PVC 容量</label><input id="pvcSize" name="pvcSize" value="5Gi"></div>
+                  <div class="field"><label for="storageClassName">既有 StorageClass</label><input id="storageClassName" name="storageClassName" placeholder="留空使用叢集預設值"></div>
+                  <div class="field"><label for="databaseSecretName">既有 Secret 名稱</label><input id="databaseSecretName" name="databaseSecretName" value="postgresql-credentials"></div>
+                  <div class="field"><label for="databasePasswordKey">Password Key</label><input id="databasePasswordKey" name="databasePasswordKey" value="password"></div>
+                  <div class="field"><label for="databaseUserKey">User Key</label><input id="databaseUserKey" name="databaseUserKey" value="username"><p class="hint">PRODUCTION 從既有 Secret 讀取，不輸出 User 明文。</p></div>
+                  <div class="field"><label for="databaseNameKey">Database Key</label><input id="databaseNameKey" name="databaseNameKey" value="database"><p class="hint">PRODUCTION 從既有 Secret 讀取，不輸出 Database 明文。</p></div>
+                </div>
+              </div>
+
+              <div class="form-section" data-database-panel="external" hidden>
+                <h3>外部 PostgreSQL</h3><p>不建立 StatefulSet 或 PVC，只把連線資訊與既有 Secret reference 注入 Backend。</p>
+                <div class="form-grid">
+                  <div class="field"><label for="externalHost">Host</label><input id="externalHost" name="externalHost" placeholder="postgres.example.internal"></div>
+                  <div class="field"><label for="externalPort">Port</label><input id="externalPort" name="externalPort" type="number" min="1" max="65535" value="5432"></div>
+                  <div class="field"><label for="externalDatabase">Database</label><input id="externalDatabase" name="externalDatabase" value="app"></div>
+                  <div class="field"><label for="externalUser">User</label><input id="externalUser" name="externalUser" value="app"></div>
+                  <div class="field"><label for="externalSecretName">既有 Secret 名稱</label><input id="externalSecretName" name="externalSecretName" value="external-postgresql"></div>
+                  <div class="field"><label for="externalPasswordKey">Password Key</label><input id="externalPasswordKey" name="externalPasswordKey" value="password"></div>
+                  <div class="field"><label for="externalHostKey">Host Key（選填）</label><input id="externalHostKey" name="externalHostKey" placeholder="例如 host"><p class="hint">填寫時會從同一個 Secret 讀取 Host，並取代上方 Host。</p></div>
+                  <div class="field"><label for="externalUserKey">User Key</label><input id="externalUserKey" name="externalUserKey" value="username"></div>
+                  <div class="field"><label for="externalDatabaseKey">Database Key</label><input id="externalDatabaseKey" name="externalDatabaseKey" value="database"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wizard-step" data-step="3" hidden>
+            <header class="panel-head"><h2>設定對外方式與可靠性</h2><p>Backend 預設保持 ClusterIP。Ingress 與 LoadBalancer 只引用叢集已具備的能力。</p></header>
+            <div class="panel-body">
+              <div class="form-section">
+                <h3>服務入口</h3>
+                <div class="form-grid">
+                  <div class="field full"><label for="exposureMode">對外方式</label><select id="exposureMode" name="exposureMode"><option value="clusterip">僅 ClusterIP，由 port-forward 驗證</option><option value="ingress">Ingress（需既有 Controller／Class）</option><option value="loadbalancer">LoadBalancer（需雲端或 LB 整合）</option></select></div>
+                </div>
+                <div class="form-grid" data-ingress-fields hidden style="margin-top:16px">
+                  <div class="field"><label for="ingressClassName">IngressClass</label><input id="ingressClassName" name="ingressClassName" placeholder="例如 nginx"></div>
+                  <div class="field"><label for="hostname">Hostname</label><input id="hostname" name="hostname" placeholder="app.example.com"></div>
+                  <div class="field full"><label class="check-row"><input id="tlsEnabled" name="tlsEnabled" type="checkbox">啟用 TLS，引用既有 TLS Secret</label></div>
+                  <div class="field"><label for="tlsSecretName">TLS Secret 名稱</label><input id="tlsSecretName" name="tlsSecretName" placeholder="app-tls"></div>
+                </div>
+              </div>
+
+              <div class="form-section">
+                <h3>可靠性選項</h3><p>這些設定只作用於 Deployment；單副本不會自動產生 PDB。</p>
+                <div class="form-grid">
+                  <div class="field full"><label class="check-row"><input id="createPdb" name="createPdb" type="checkbox">產生 PodDisruptionBudget（單副本會顯示風險警告）</label></div>
+                  <div class="field full"><label class="check-row"><input id="hpaEnabled" name="hpaEnabled" type="checkbox">產生 CPU HorizontalPodAutoscaler（需要 Metrics API 與 CPU Request）</label></div>
+                </div>
+                <div class="form-grid three" data-hpa-fields hidden style="margin-top:16px">
+                  <div class="field"><label for="hpaMin">Min Replicas</label><input id="hpaMin" name="hpaMin" type="number" min="1" value="2"></div>
+                  <div class="field"><label for="hpaMax">Max Replicas</label><input id="hpaMax" name="hpaMax" type="number" min="2" value="5"></div>
+                  <div class="field"><label for="hpaCpu">CPU Target %</label><input id="hpaCpu" name="hpaCpu" type="number" min="1" max="100" value="70"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="wizard-step" data-step="4" hidden>
+            <header class="panel-head"><h2>檢查與產生</h2><p>先解決阻擋錯誤。警告不一定阻擋下載，但代表仍需在目標環境確認風險。</p></header>
+            <div class="panel-body">
+              <div class="review-grid">
+                <section class="review-card"><h3>規格摘要</h3><dl class="summary-list" id="reviewSummary"></dl></section>
+                <section class="review-card"><h3>檢查結果</h3><ul class="issue-list" id="issueList"></ul></section>
+              </div>
+              <div class="notice" style="margin-top:16px">「可產生」只代表通過 KubeManifestPilot 靜態規則；真正相容性必須在目標叢集執行 server-side dry-run。</div>
+
+              <div class="output-tabs" role="tablist" aria-label="產生結果">
+                <button class="output-tab active" type="button" role="tab" aria-selected="true" data-output-tab="yaml">Manifest YAML</button>
+                <button class="output-tab" type="button" role="tab" aria-selected="false" data-output-tab="tutorial">DEPLOY.md</button>
+                <button class="output-tab" type="button" role="tab" aria-selected="false" data-output-tab="json">Questionnaire JSON</button>
+              </div>
+              <div class="output-toolbar">
+                <span id="outputStatus">尚未產生</span>
+                <div class="right">
+                  <button class="button small" id="copyOutput" type="button">複製目前內容</button>
+                  <button class="button small" id="downloadCurrent" type="button">下載目前內容</button>
+                  <button class="button small primary" id="downloadAll" type="button">下載三份檔案</button>
+                </div>
+              </div>
+              <pre class="code-output" id="yamlOutput" tabindex="0" aria-label="Kubernetes YAML 預覽">完成問卷後按下「檢查並產生」。</pre>
+              <pre class="deploy-output" id="tutorialOutput" tabindex="0" aria-label="部署教學預覽" hidden></pre>
+              <pre class="code-output" id="jsonOutput" tabindex="0" aria-label="Questionnaire JSON 預覽" hidden></pre>
+              <div class="ad-placeholder" data-enabled="false" aria-hidden="true">廣告保留區</div>
+            </div>
+          </div>
+
+          <footer class="panel-actions">
+            <button class="button" type="button" data-action="previous" disabled>上一步</button>
+            <div class="right">
+              <button class="button" type="button" data-action="save-draft">儲存非敏感草稿</button>
+              <button class="button primary" type="button" data-action="next">下一步</button>
+              <button class="button primary" type="button" data-action="generate" hidden>檢查並產生</button>
+            </div>
+          </footer>
+        </section>
+
+        <aside class="summary-panel" aria-label="目前問卷摘要">
+          <div class="summary-head"><h2>目前規格</h2></div>
+          <div class="summary-body">
+            <dl class="summary-list" id="liveSummary"></dl>
+            <div>
+              <div class="summary-resources"><h3>預計產生</h3><div class="resource-chips" id="resourcePreview"></div></div>
+              <div class="status-box neutral" id="liveStatus">完成必要欄位後即可產生。</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </form>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-main">
+      <div class="footer-brand"><strong>KubeManifestPilot</strong><p>問卷資料留在此裝置。Production Secret 僅接受既有名稱與 Key，不收集密碼。</p></div>
+      <nav class="footer-links" aria-label="頁尾導覽"><a href="../privacy/">隱私權</a><a href="../privacy/#cookies">Cookie 設定</a><a href="../licenses/">第三方授權</a><a href="#" data-config-link="github">GitHub</a><a href="#" data-config-link="support">支持專案</a></nav>
+    </div>
+  </footer>
+  <div class="toast-region" data-toast-region aria-live="polite"></div>
+  <script src="../assets/js/config.js"></script>
+  <script src="../assets/js/site.js"></script>
+  <script src="../assets/js/generator-engine.js"></script>
+  <script src="../assets/js/generator-ui.js"></script>
+</body>
+</html>

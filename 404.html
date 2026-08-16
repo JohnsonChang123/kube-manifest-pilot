@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0b1220">
+  <title>找不到頁面｜KubeManifestPilot</title>
+  <script>
+    (function () {
+      var base = document.createElement('base');
+      if (window.location.protocol === 'file:') {
+        base.href = './';
+      } else if (/\.github\.io$/i.test(window.location.hostname)) {
+        var parts = window.location.pathname.split('/').filter(Boolean);
+        base.href = parts.length ? '/' + parts[0] + '/' : '/';
+      } else {
+        base.href = '/';
+      }
+      document.head.appendChild(base);
+    })();
+  </script>
+  <link rel="stylesheet" href="./assets/css/site.css">
+</head>
+<body class="site-page">
+  <a class="skip-link" href="#main-content">跳到主要內容</a>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="./" aria-label="KubeManifestPilot 首頁">
+        <span class="brand-mark" aria-hidden="true">K</span>
+        <span>KubeManifestPilot</span>
+      </a>
+      <nav class="site-nav" aria-label="主要導覽">
+        <a href="./">首頁</a>
+        <a href="./generator/">問卷產生器</a>
+        <a href="./templates/">範本</a>
+        <a href="./designer/">架構設計工具</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main-content" class="page-shell">
+    <section class="hero error-hero">
+      <p class="eyebrow">404 · Page Not Found</p>
+      <h1>找不到這個頁面</h1>
+      <p class="hero-lead">網址可能已變更、輸入有誤，或頁面尚未發布。KubeManifestPilot 的 Kubernetes YAML 產生功能仍可從首頁或問卷產生器使用。</p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="./">返回首頁</a>
+        <a class="button button-secondary" href="./generator/">開啟問卷產生器</a>
+        <a class="button button-secondary" href="./templates/">瀏覽範本</a>
+      </div>
+    </section>
+
+    <!-- 廣告保留區預設停用；此頁不載入任何廣告程式。 -->
+    <aside class="ad-placeholder" data-ad-status="disabled" hidden aria-hidden="true">
+      廣告保留區（目前未啟用）
+    </aside>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <p><strong>KubeManifestPilot</strong> — Guided Kubernetes YAML Manifest Generator</p>
+      <nav class="footer-links" aria-label="頁尾導覽">
+        <a href="./privacy/">隱私權</a>
+        <a href="./privacy/#cookies">Cookie 設定</a>
+        <a href="./licenses/">第三方授權</a>
+        <a href="#" data-config-link="github" aria-label="GitHub 專案連結（尚未設定）">GitHub</a>
+        <a href="#" data-config-link="support" aria-label="支持專案連結（尚未設定）">支持專案</a>
+      </nav>
+      <p class="footer-meta">純前端工具，不會連線或修改你的 Kubernetes Cluster。</p>
+    </div>
+  </footer>
+  <div class="toast-region" data-toast-region aria-live="polite"></div>
+  <script src="./assets/js/config.js"></script>
+  <script src="./assets/js/site.js"></script>
+</body>
+</html>
